@@ -67,20 +67,25 @@ def main():
     cache = None
     if not args.no_turboquant:
         from turboquant_cache import TurboQuantKVCache
+
         if hasattr(model, 'make_cache'):
             cache = model.make_cache()
-            tq_count = 0
-            for i, c in enumerate(cache):
-                if isinstance(c, KVCache):
-                    cache[i] = TurboQuantKVCache(group_size=64, bits=args.tq_bits)
-                    tq_count += 1
-            if tq_count > 0:
-                print(f"TurboQuant: {tq_count} attention layers at {args.tq_bits}-bit")
-            else:
-                print("TurboQuant: no KVCache layers found (model may use different cache type)")
-                cache = None
         else:
-            print("TurboQuant: model has no make_cache() (will run without TQ for now)")
+            # K2 and other models without make_cache: create KVCache list manually
+            inner = model.model if hasattr(model, 'model') else model
+            num_layers = len(inner.layers)
+            cache = [KVCache() for _ in range(num_layers)]
+
+        tq_count = 0
+        for i, c in enumerate(cache):
+            if isinstance(c, KVCache):
+                cache[i] = TurboQuantKVCache(group_size=64, bits=args.tq_bits)
+                tq_count += 1
+
+        if tq_count > 0:
+            print(f"TurboQuant: {tq_count} layers at {args.tq_bits}-bit ({16/args.tq_bits:.1f}x compression)")
+        else:
+            cache = None
 
     # Generate
     print(f"\nPrompt: {args.prompt}")
