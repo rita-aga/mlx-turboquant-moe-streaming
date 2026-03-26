@@ -549,9 +549,17 @@ code.il {
   font-size: 0.78rem;
   font-weight: 600;
   color: #fff;
+  white-space: nowrap;
+  position: relative;
 }
 .cs-bar.full { width: 100%; background: var(--crimson); }
-.cs-bar.compressed { width: 18.9%; background: var(--emerald); min-width: 100px; }
+.cs-bar.compressed { width: 18.9%; background: var(--emerald); min-width: 40px; overflow: visible; }
+.cs-bar.compressed span {
+  position: absolute;
+  left: calc(100% + 10px);
+  color: var(--emerald);
+  font-size: 0.72rem;
+}
 
 /* ================================================================
    NEXT STEPS
@@ -680,28 +688,69 @@ pre { overflow-x: auto; }
 @media (max-width: 1200px) {
   .scroll-nav {
     position: fixed;
-    right: auto; left: 0; top: auto; bottom: 0;
+    right: 12px;
+    top: 12px;
+    left: auto;
+    bottom: auto;
     transform: none;
-    flex-direction: row;
     background: var(--forest);
-    width: 100%; gap: 0;
-    overflow-x: auto; -webkit-overflow-scrolling: touch;
-    padding: 0; z-index: 9990;
-    box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
+    padding: 0;
+    z-index: 9990;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    max-height: 60vh;
+    overflow-y: auto;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .scroll-nav.mobile-open {
+    opacity: 1;
+    pointer-events: auto;
   }
   .scroll-nav a {
-    border-right: none; border-top: 2px solid transparent;
-    text-align: center; padding: 10px 12px;
-    color: rgba(255,255,255,0.5); font-size: 0.52rem; flex-shrink: 0;
+    border-right: none;
+    border-left: 2px solid transparent;
+    text-align: left;
+    padding: 10px 16px;
+    color: rgba(255,255,255,0.6);
+    font-size: 0.58rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
   }
-  .scroll-nav a:hover { color: rgba(255,255,255,0.8); }
+  .scroll-nav a:hover { color: #fff; background: rgba(255,255,255,0.06); }
   .scroll-nav a.active {
-    color: var(--emerald); border-top-color: var(--emerald);
+    color: var(--emerald);
+    border-left-color: var(--emerald);
     border-right-color: transparent;
+    background: rgba(0,216,128,0.08);
   }
 }
-@media (max-width: 600px) {
-  .scroll-nav a { padding: 8px 8px; font-size: 0.48rem; }
+
+/* Mobile floating pill toggle */
+.scroll-nav-pill {
+  display: none;
+  position: fixed;
+  right: 12px;
+  top: 12px;
+  z-index: 9991;
+  background: var(--forest);
+  color: var(--emerald);
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 1px solid rgba(0,216,128,0.25);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  transition: background 0.15s;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scroll-nav-pill:hover { background: var(--forest-mid); }
+@media (max-width: 1200px) {
+  .scroll-nav-pill { display: block; }
 }
 
 /* ================================================================
@@ -860,7 +909,7 @@ pre { overflow-x: auto; }
 <div class="hero-rules-top-thin"></div>
 
 <header class="hero-section">
-  <div class="hero-bg" id="heroBg" style="background-image: url('../results/assets/hero-neon-wave.png');"></div>
+  <div class="hero-bg" id="heroBg" style="background-image: url('assets/hero-neon-wave.jpg');"></div>
   <div class="hero-overlay"></div>
   <div class="hero-content">
     <div class="hero-layout">
@@ -911,7 +960,7 @@ pre { overflow-x: auto; }
     <span class="hero-machine-sep">/</span>
     <span>18 GB/s NVMe</span>
   </div>
-  <span style="font-family: var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; font-size: 0.55rem; color: rgba(255,255,255,0.2);">March 2026</span>
+  <span style="font-family: var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; font-size: 0.55rem; color: rgba(255,255,255,0.2);">March 25, 2026</span>
 </div>
 <div class="hero-rules-bottom"></div>
 
@@ -1536,7 +1585,7 @@ PyObject *arr = <span class="fn">PyArray_SimpleNewFromData</span>(<span class="n
     </div>
     <div class="cs-row">
       <div class="cs-label">TurboQuant 3-bit (5.3x compression)</div>
-      <div class="cs-bar compressed">3 bits per value</div>
+      <div class="cs-bar compressed"><span>3 bits per value</span></div>
     </div>
   </div>
 
@@ -1673,17 +1722,17 @@ PyObject *arr = <span class="fn">PyArray_SimpleNewFromData</span>(<span class="n
     and a 64-dimensional <code class="il">k_pe</code> per token. Both get Hadamard-rotated and quantized.
   </p>
 
-  <div class="result-card" style="background: rgba(255,255,255,0.04); border-color: var(--emerald);">
+  <div class="result-card" style="background: rgba(255,255,255,0.06); border-color: var(--emerald);">
     <h4 style="color: var(--emerald);">Streaming + TurboQuant on K2 <span class="badge badge-measured">Measured</span></h4>
     <div class="table-wrap">
-    <table class="data-table" style="color: rgba(255,255,255,0.85);">
-      <tr><th style="border-color: rgba(255,255,255,0.1);">Metric</th><th style="border-color: rgba(255,255,255,0.1);">Value</th></tr>
-      <tr><td style="border-color: rgba(255,255,255,0.06);">Model</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">Kimi-K2-Instruct (1.04T params)</td></tr>
-      <tr><td style="border-color: rgba(255,255,255,0.06);">Output</td><td style="border-color: rgba(255,255,255,0.06);" class="match">Tokyo. It is the most populous metropolitan area</td></tr>
-      <tr><td style="border-color: rgba(255,255,255,0.06);">RAM</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">7.4 GB</td></tr>
-      <tr><td style="border-color: rgba(255,255,255,0.06);">Expert streaming</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">570.8 GB from SSD</td></tr>
-      <tr><td style="border-color: rgba(255,255,255,0.06);">KV compression</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">4-bit TurboQuant (4x)</td></tr>
-      <tr><td style="border-color: rgba(255,255,255,0.06);">Speed</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell" style="color: var(--emerald);">0.53 tok/s</td></tr>
+    <table class="data-table" style="border-collapse: collapse; width: 100%;">
+      <tr><th style="background: var(--emerald); color: #fff; border: none;">Metric</th><th style="background: var(--emerald); color: #fff; border: none;">Value</th></tr>
+      <tr><td style="background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); border-bottom: 1px solid rgba(255,255,255,0.06);">Model</td><td style="background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); border-bottom: 1px solid rgba(255,255,255,0.06);" class="mono-cell">Kimi-K2-Instruct (1.04T params)</td></tr>
+      <tr><td style="background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.75); border-bottom: 1px solid rgba(255,255,255,0.06);">Output</td><td style="background: rgba(255,255,255,0.04); color: var(--emerald-light); font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.06);">Tokyo. It is the most populous metropolitan area</td></tr>
+      <tr><td style="background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); border-bottom: 1px solid rgba(255,255,255,0.06);">RAM</td><td style="background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); border-bottom: 1px solid rgba(255,255,255,0.06);" class="mono-cell">7.4 GB</td></tr>
+      <tr><td style="background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.75); border-bottom: 1px solid rgba(255,255,255,0.06);">Expert streaming</td><td style="background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); border-bottom: 1px solid rgba(255,255,255,0.06);" class="mono-cell">570.8 GB from SSD</td></tr>
+      <tr><td style="background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); border-bottom: 1px solid rgba(255,255,255,0.06);">KV compression</td><td style="background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); border-bottom: 1px solid rgba(255,255,255,0.06);" class="mono-cell">4-bit TurboQuant (4x)</td></tr>
+      <tr><td style="background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.75); border: none;">Speed</td><td style="background: rgba(255,255,255,0.04); color: var(--emerald-light); font-weight: 700; border: none;" class="mono-cell">0.53 tok/s</td></tr>
     </table>
     </div>
   </div>
@@ -1776,7 +1825,7 @@ PyObject *arr = <span class="fn">PyArray_SimpleNewFromData</span>(<span class="n
      FOOTER
      ============================================================ -->
 <footer>
-  <p><strong>TurboMoE Research</strong> -- March 2026</p>
+  <p>March 25, 2026</p>
   <p style="margin-top: 4px;">All measurements on Apple M3 Max, 128 GB unified memory, 18 GB/s NVMe.</p>
   <p style="margin-top: 12px;">
     <a href="https://github.com/rita-aga/mlx-turboquant-moe-streaming" target="_blank" rel="noopener" style="color: var(--emerald); text-decoration: none; font-weight: 600;">github.com/rita-aga/mlx-turboquant-moe-streaming</a>
@@ -1785,19 +1834,20 @@ PyObject *arr = <span class="fn">PyArray_SimpleNewFromData</span>(<span class="n
 </footer>
 
 
+<div class="scroll-nav-pill" id="scrollNavPill" onclick="document.getElementById('scrollNav').classList.toggle('mobile-open')">&#9776; Two Solutions</div>
 <nav class="scroll-nav" id="scrollNav">
-  <a href="#two-solutions">Two Solutions</a>
-  <a href="#ch-size">1. Size Problem</a>
-  <a href="#ch-moe">2. Mixture of Experts</a>
-  <a href="#ch-streaming">3. SSD Streaming</a>
-  <a href="#ch-speed">4. Python to C</a>
-  <a href="#ch-scaling">5. Scaling Up</a>
-  <a href="#ch-kvcache">6. KV Cache</a>
-  <a href="#ch-quantization">7. Quantization</a>
-  <a href="#ch-turboquant">8. TurboQuant</a>
-  <a href="#ch-tokyo">9. Tokyo Test</a>
-  <a href="#ch-combined">10. Both Together</a>
-  <a href="#ch-next">11. What's Next</a>
+  <a href="#two-solutions" data-short="Two Solutions">Two Solutions</a>
+  <a href="#ch-size" data-short="1. Size">1. Size Problem</a>
+  <a href="#ch-moe" data-short="2. MoE">2. Mixture of Experts</a>
+  <a href="#ch-streaming" data-short="3. SSD">3. SSD Streaming</a>
+  <a href="#ch-speed" data-short="4. Speed">4. Python to C</a>
+  <a href="#ch-scaling" data-short="5. Scale">5. Scaling Up</a>
+  <a href="#ch-kvcache" data-short="6. KV">6. KV Cache</a>
+  <a href="#ch-quantization" data-short="7. Quant">7. Quantization</a>
+  <a href="#ch-turboquant" data-short="8. Turbo">8. TurboQuant</a>
+  <a href="#ch-tokyo" data-short="9. Tokyo">9. Tokyo Test</a>
+  <a href="#ch-combined" data-short="10. Both">10. Both Together</a>
+  <a href="#ch-next" data-short="11. Next">11. What's Next</a>
 </nav>
 
 <!-- ============================================================
@@ -1972,6 +2022,7 @@ buildCharts();
 
 // ── Scroll-tracking navigation ──
 const scrollNav = document.getElementById('scrollNav');
+const scrollPill = document.getElementById('scrollNavPill');
 if (scrollNav) {
   const navLinks = scrollNav.querySelectorAll('a');
   const sections = [];
@@ -1979,6 +2030,20 @@ if (scrollNav) {
     const id = link.getAttribute('href').slice(1);
     const el = document.getElementById(id);
     if (el) sections.push({ id, el, link });
+  });
+
+  // Close dropdown and scroll when a link is clicked
+  navLinks.forEach(link => {
+    link.addEventListener('click', function() {
+      scrollNav.classList.remove('mobile-open');
+    });
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', function(e) {
+    if (scrollPill && !scrollPill.contains(e.target) && !scrollNav.contains(e.target)) {
+      scrollNav.classList.remove('mobile-open');
+    }
   });
 
   function updateActiveNav() {
@@ -1990,7 +2055,14 @@ if (scrollNav) {
     navLinks.forEach(l => l.classList.remove('active'));
     if (current) {
       const active = scrollNav.querySelector(`a[href="#${current}"]`);
-      if (active) active.classList.add('active');
+      if (active) {
+        active.classList.add('active');
+        // Update the floating pill text
+        if (scrollPill) {
+          var short = active.getAttribute('data-short') || active.textContent;
+          scrollPill.innerHTML = '&#9776; ' + short;
+        }
+      }
     }
   }
 
