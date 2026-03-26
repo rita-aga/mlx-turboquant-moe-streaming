@@ -226,7 +226,18 @@ class StreamingSwitchGLU(nn.Module):
     Drop-in replacement for the standard SwitchGLU.
     Non-expert weights (if any) stay in RAM.
     Expert weights loaded on demand via ExpertWeightStore.
+    Uses a persistent background thread for async down-projection prefetch.
     """
+
+    # Shared thread pool across all instances (one thread)
+    _pool = None
+
+    @classmethod
+    def _get_pool(cls):
+        if cls._pool is None:
+            import concurrent.futures
+            cls._pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        return cls._pool
 
     def __init__(self, gate_store, up_store, down_store, activation=None):
         super().__init__()
@@ -270,10 +281,14 @@ class StreamingSwitchGLU(nn.Module):
         mapped = mx.array(remap[idx_np])
         unique_ids = unique_ids.tolist()
 
+        # Load gate + up experts (cache or SSD)
         gate_w, gate_s, gate_b = self.gate_store.load_experts(unique_ids)
         up_w, up_s, up_b = self.up_store.load_experts(unique_ids)
 
-        # Gate + Up projections (GPU)
+        # Prefetch down projection in background thread while GPU runs gate+up
+        down_future = self._get_pool().submit(self.down_store.load_experts, unique_ids)
+
+        # Gate + Up projections (GPU — runs in parallel with down prefetch)
         x_gate = mx.gather_qmm(
             x, gate_w, gate_s, gate_b,
             rhs_indices=mapped, transpose=True,
@@ -290,8 +305,8 @@ class StreamingSwitchGLU(nn.Module):
         # SwiGLU activation
         x_act = self.activation(x_up, x_gate)
 
-        # Down projection
-        down_w, down_s, down_b = self.down_store.load_experts(unique_ids)
+        # Get down weights (likely already loaded by now)
+        down_w, down_s, down_b = down_future.result()
 
         x_out = mx.gather_qmm(
             x_act, down_w, down_s, down_b,
