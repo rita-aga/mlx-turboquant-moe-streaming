@@ -185,6 +185,8 @@ class ExpertWeightStore:
 
 import numpy as np
 
+USE_MMAP = os.environ.get("USE_MMAP", "0") == "1"
+
 class StreamingSwitchGLU(nn.Module):
     """SwitchGLU that streams expert weights from SSD.
 
@@ -349,23 +351,43 @@ def setup_streaming_for_model(model, model_dir):
                     s_shape = tuple(s_info["shape"][1:]) if s_info else None
                     b_shape = tuple(b_info["shape"][1:]) if b_info else None
 
-                    store = ExpertWeightStore(
-                        weight_file=w_info["filepath"],
-                        weight_offset=w_info["offset"],
-                        weight_expert_bytes=w_expert_bytes,
-                        scales_file=s_info["filepath"] if s_info else "",
-                        scales_offset=s_info["offset"] if s_info else 0,
-                        scales_expert_bytes=s_expert_bytes,
-                        biases_file=b_info["filepath"] if b_info else None,
-                        biases_offset=b_info["offset"] if b_info else 0,
-                        biases_expert_bytes=b_expert_bytes,
-                        num_experts=num_experts,
-                        weight_shape=w_shape,
-                        scales_shape=s_shape,
-                        biases_shape=b_shape,
-                        group_size=proj.group_size,
-                        bits=proj.bits,
-                    )
+                    if USE_MMAP:
+                        from mmap_streaming import MmapExpertStore
+                        store = MmapExpertStore(
+                            filepath=w_info["filepath"],
+                            base_offset=w_info["offset"],
+                            expert_bytes=w_expert_bytes,
+                            num_experts=num_experts,
+                            weight_shape=w_shape,
+                            scales_filepath=s_info["filepath"] if s_info else "",
+                            scales_offset=s_info["offset"] if s_info else 0,
+                            scales_expert_bytes=s_expert_bytes,
+                            scales_shape=s_shape,
+                            biases_filepath=b_info["filepath"] if b_info else None,
+                            biases_offset=b_info["offset"] if b_info else 0,
+                            biases_expert_bytes=b_expert_bytes,
+                            biases_shape=b_shape,
+                            group_size=proj.group_size,
+                            bits=proj.bits,
+                        )
+                    else:
+                        store = ExpertWeightStore(
+                            weight_file=w_info["filepath"],
+                            weight_offset=w_info["offset"],
+                            weight_expert_bytes=w_expert_bytes,
+                            scales_file=s_info["filepath"] if s_info else "",
+                            scales_offset=s_info["offset"] if s_info else 0,
+                            scales_expert_bytes=s_expert_bytes,
+                            biases_file=b_info["filepath"] if b_info else None,
+                            biases_offset=b_info["offset"] if b_info else 0,
+                            biases_expert_bytes=b_expert_bytes,
+                            num_experts=num_experts,
+                            weight_shape=w_shape,
+                            scales_shape=s_shape,
+                            biases_shape=b_shape,
+                            group_size=proj.group_size,
+                            bits=proj.bits,
+                        )
                     stores[proj_name] = store
                     bytes_freed += w_info["size"] + (s_info["size"] if s_info else 0) + (b_info["size"] if b_info else 0)
                     break
