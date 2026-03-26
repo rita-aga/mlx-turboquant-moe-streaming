@@ -272,14 +272,19 @@ class StreamingSwitchGLU(nn.Module):
     def __call__(self, x, indices) -> mx.array:
         x = mx.expand_dims(x, (-2, -3))
 
-        # Index remapping — vectorized numpy, no Python loop
+        # Index remapping — C extension when available, numpy fallback
         idx_np = np.asarray(indices, dtype=np.int32)
-        flat = idx_np.ravel()
-        unique_ids = np.unique(flat)
-        remap = np.empty(unique_ids.max() + 1, dtype=np.int32)
-        remap[unique_ids] = np.arange(len(unique_ids), dtype=np.int32)
-        mapped = mx.array(remap[idx_np])
-        unique_ids = unique_ids.tolist()
+        try:
+            import fast_pread
+            unique_ids, mapped_np = fast_pread.remap_indices(idx_np)
+            mapped = mx.array(mapped_np)
+        except (ImportError, Exception):
+            flat = idx_np.ravel()
+            unique_ids_arr = np.unique(flat)
+            remap = np.empty(unique_ids_arr.max() + 1, dtype=np.int32)
+            remap[unique_ids_arr] = np.arange(len(unique_ids_arr), dtype=np.int32)
+            mapped = mx.array(remap[idx_np])
+            unique_ids = unique_ids_arr.tolist()
 
         # Load gate + up experts (cache or SSD)
         gate_w, gate_s, gate_b = self.gate_store.load_experts(unique_ids)

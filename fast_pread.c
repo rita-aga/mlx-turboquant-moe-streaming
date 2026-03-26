@@ -123,11 +123,82 @@ static PyObject *py_load_experts(PyObject *self, PyObject *args) {
     return arr;
 }
 
+/*
+ * remap_indices(indices_flat, num_elements)
+ *
+ * Given a flat int32 array of expert indices, returns:
+ *   (unique_ids: list, mapped: numpy int32 array same shape as input)
+ *
+ * This replaces the Python:
+ *   unique_ids = np.unique(flat)
+ *   remap[unique_ids] = np.arange(len(unique_ids))
+ *   mapped = remap[idx_np]
+ */
+static PyObject *py_remap_indices(PyObject *self, PyObject *args) {
+    PyArrayObject *indices_arr;
+
+    if (!PyArg_ParseTuple(args, "O!", &PyArray_Type, &indices_arr)) {
+        return NULL;
+    }
+
+    if (PyArray_TYPE(indices_arr) != NPY_INT32) {
+        PyErr_SetString(PyExc_TypeError, "indices must be int32");
+        return NULL;
+    }
+
+    int32_t *data = (int32_t *)PyArray_DATA(indices_arr);
+    npy_intp n = PyArray_SIZE(indices_arr);
+
+    /* Find unique IDs and max */
+    int32_t max_id = 0;
+    for (npy_intp i = 0; i < n; i++) {
+        if (data[i] > max_id) max_id = data[i];
+    }
+
+    /* Mark which IDs are present */
+    int32_t *present = calloc(max_id + 1, sizeof(int32_t));
+    for (npy_intp i = 0; i < n; i++) {
+        present[data[i]] = 1;
+    }
+
+    /* Build unique list and remap table */
+    int32_t *remap = malloc((max_id + 1) * sizeof(int32_t));
+    PyObject *unique_list = PyList_New(0);
+    int32_t next_id = 0;
+    for (int32_t i = 0; i <= max_id; i++) {
+        if (present[i]) {
+            remap[i] = next_id++;
+            PyList_Append(unique_list, PyLong_FromLong(i));
+        }
+    }
+    free(present);
+
+    /* Apply remap to create output array (same shape as input) */
+    int ndim = PyArray_NDIM(indices_arr);
+    npy_intp *dims = PyArray_DIMS(indices_arr);
+    PyObject *mapped = PyArray_SimpleNew(ndim, dims, NPY_INT32);
+    int32_t *out = (int32_t *)PyArray_DATA((PyArrayObject *)mapped);
+    for (npy_intp i = 0; i < n; i++) {
+        out[i] = remap[data[i]];
+    }
+    free(remap);
+
+    /* Return (unique_ids_list, mapped_array) */
+    PyObject *result = PyTuple_Pack(2, unique_list, mapped);
+    Py_DECREF(unique_list);
+    Py_DECREF(mapped);
+    return result;
+}
+
 static PyMethodDef methods[] = {
     {"load_experts", py_load_experts, METH_VARARGS,
      "Load multiple experts from file descriptor via parallel pread.\n"
      "Args: fd, expert_ids, base_offset, expert_bytes, expert_shape, numpy_dtype_num\n"
      "Returns: numpy array [K, *expert_shape]"},
+    {"remap_indices", py_remap_indices, METH_VARARGS,
+     "Remap expert indices to contiguous IDs.\n"
+     "Args: indices (numpy int32 array)\n"
+     "Returns: (unique_ids_list, mapped_numpy_array)"},
     {NULL, NULL, 0, NULL}
 };
 
