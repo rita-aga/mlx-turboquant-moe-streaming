@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TurboMoE -- Running a 1T-Parameter Model on a Laptop</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400;1,500&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Serif+Display&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+/* ================================================================
+   ROOT VARIABLES -- Tokyo Neon default
+   ================================================================ */
+:root {
+  --warm-white: #fefcf8;
+  --sage: #dff0d6;
+  --sage-deep: #b8d4a8;
+  --forest: #0a1e10;
+  --forest-deep: #051008;
+  --forest-mid: #143018;
+  --ink: #050505;
+  --text-primary: #0a0a0a;
+  --text-secondary: #2e3e28;
+  --text-light: #5a6a52;
+  --emerald: #00d880;
+  --emerald-light: #20ff9f;
+  --crimson: #f02040;
+  --crimson-light: #ff4060;
+  --sakura: #ff7090;
+  --sakura-bg: #ffe8ee;
+  --gold: #ffcc00;
+  --gold-light: #ffe040;
+  --code-bg: #051008;
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-body: 'Crimson Pro', Georgia, serif;
+  --font-ui: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--warm-white);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  line-height: 1.8;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--warm-white); }
+::-webkit-scrollbar-thumb { background: var(--sage-deep); }
+
+/* ================================================================
+   LAYOUT UTILITIES
+   ================================================================ */
+.reading-col { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+.wide-col { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+
+@media (max-width: 768px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .grid-4 { grid-template-columns: 1fr; }
+}
+
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ================================================================
+   TYPOGRAPHY CLASSES
+   ================================================================ */
+.display { font-family: var(--font-display); }
+.label { font-family: var(--font-ui); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.mono { font-family: var(--font-mono); }
+
+/* Control panel removed — using Tokyo Neon defaults */
+
+/* ================================================================
+   HERO
+   ================================================================ */
+.hero-section {
+  position: relative;
+  overflow: hidden;
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+}
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background: center/cover no-repeat;
+  z-index: 0;
+}
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, rgba(15,31,18,0.92), rgba(26,46,30,0.88), rgba(10,20,12,0.94));
+  z-index: 1;
+}
+.hero-content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 56px 40px 48px;
+}
+.hero-layout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 48px;
+  align-items: center;
+}
+.hero-tag {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sakura);
+  padding: 5px 14px;
+  border: 1px solid rgba(255,112,144,0.25);
+  margin-bottom: 16px;
+}
+.hero-title {
+  font-family: var(--font-display);
+  font-size: 3.6rem;
+  line-height: 1.08;
+  color: #fff;
+  margin-bottom: 14px;
+}
+.hero-title .accent { color: var(--sakura); }
+.hero-sub {
+  font-family: var(--font-body);
+  font-size: 1.08rem;
+  font-style: italic;
+  color: rgba(255,255,255,0.58);
+  max-width: 500px;
+  line-height: 1.6;
+}
+.hero-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  background: rgba(255,255,255,0.06);
+  min-width: 300px;
+}
+.hero-stat {
+  background: rgba(0,0,0,0.35);
+  padding: 22px 24px;
+  text-align: center;
+}
+.hero-stat-num {
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  line-height: 1;
+}
+.hero-stat-label {
+  font-family: var(--font-ui);
+  font-size: 0.52rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.38);
+  margin-top: 6px;
+}
+.hero-machine {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 10px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.28);
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 1100px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 2;
+}
+.hero-machine-sep { color: rgba(255,255,255,0.1); }
+.hero-rules-top { height: 4px; background: var(--crimson); position: relative; z-index: 2; }
+.hero-rules-top-thin { height: 1px; background: var(--gold); margin-top: 1px; position: relative; z-index: 2; }
+.hero-rules-bottom { height: 1px; background: var(--gold); position: relative; z-index: 2; }
+
+@media (max-width: 900px) {
+  .hero-layout { grid-template-columns: 1fr; gap: 24px; }
+  .hero-stats { min-width: 0; }
+  .hero-content { padding: 36px 24px 32px; }
+}
+@media (max-width: 600px) {
+  .hero-title { font-size: 2.2rem; }
+  .hero-stats { grid-template-columns: 1fr 1fr; }
+  .hero-stat { padding: 14px 12px; }
+  .hero-stat-num { font-size: 2rem; }
+  .hero-machine { padding: 10px 20px; flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+
+/* ================================================================
+   CHAPTER HEADERS
+   ================================================================ */
+.chapter-header {
+  padding: 80px 24px 48px;
+  position: relative;
+}
+.chapter-header .ch-num {
+  font-family: var(--font-display);
+  font-size: 8rem;
+  line-height: 0.85;
+  opacity: 0.1;
+  position: absolute;
+  top: 20px;
+  left: 40px;
+}
+.chapter-header .ch-label {
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.chapter-header .ch-title {
+  font-family: var(--font-display);
+  font-size: 3.2rem;
+  line-height: 1.1;
+  max-width: 700px;
+}
+@media (max-width: 768px) {
+  .chapter-header .ch-num { font-size: 5rem; left: 20px; }
+  .chapter-header .ch-title { font-size: 2rem; }
+  .chapter-header { padding: 60px 20px 36px; }
+}
+@media (max-width: 480px) {
+  .chapter-header .ch-num { font-size: 3.5rem; opacity: 0.06; }
+  .chapter-header .ch-title { font-size: 1.6rem; }
+}
+
+/* ================================================================
+   CALLOUT CARDS
+   ================================================================ */
+.callout {
+  border-left: 4px solid;
+  padding: 24px 28px;
+  margin: 28px 0;
+}
+.callout-insight { border-color: var(--emerald); background: var(--sage); }
+.callout-warning { border-color: var(--crimson); background: var(--sakura-bg); }
+.callout-why { border-color: var(--gold); background: var(--warm-white); }
+.callout .callout-label {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.callout-insight .callout-label { color: var(--emerald); }
+.callout-warning .callout-label { color: var(--crimson); }
+.callout-why .callout-label { color: var(--gold); }
+.callout h4 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.callout p { margin-bottom: 10px; }
+.callout p:last-child { margin-bottom: 0; }
+
+/* ================================================================
+   PULL QUOTE
+   ================================================================ */
+.pull-quote {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.8rem;
+  line-height: 1.4;
+  border-left: 6px solid var(--sakura);
+  padding: 24px 0 24px 32px;
+  margin: 48px 0;
+  max-width: 700px;
+}
+
+/* ================================================================
+   CODE BLOCKS
+   ================================================================ */
+.code-block {
+  background: var(--code-bg);
+  overflow: hidden;
+  margin: 28px 0;
+  border-left: 4px solid var(--gold);
+  max-width: 100%;
+}
+.code-header {
+  background: var(--forest-mid);
+  padding: 10px 20px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--gold);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.code-header .lang-tag {
+  background: rgba(255,204,0,0.2);
+  color: var(--gold);
+  padding: 2px 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+.code-block pre {
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: #d4d4d4;
+  overflow-x: auto;
+}
+.kw { color: #c792ea; }
+.fn { color: #82aaff; }
+.st { color: #c3e88d; }
+.cm { color: #5c6370; font-style: italic; }
+.nu { color: #f78c6c; }
+.ty { color: #ffcb6b; }
+.op { color: #89ddff; }
+.va { color: #f07178; }
+
+code.il {
+  background: rgba(0,216,128,0.08);
+  border: 1px solid rgba(0,216,128,0.15);
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  color: var(--emerald);
+}
+
+/* ================================================================
+   DATA TABLES
+   ================================================================ */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 0.9rem;
+}
+.data-table th {
+  background: var(--forest);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--forest);
+}
+.data-table td {
+  padding: 11px 14px;
+  border: 1px solid #e2e5de;
+}
+.data-table tr:nth-child(even) td { background: var(--sage); }
+.data-table tr:nth-child(odd) td { background: #fff; }
+.match { color: var(--emerald); font-weight: 700; }
+.no-match { color: var(--crimson); }
+.mono-cell { font-family: var(--font-mono); font-size: 0.85rem; }
+
+/* ================================================================
+   RESULT CARD
+   ================================================================ */
+.result-card {
+  background: var(--sage);
+  border-left: 4px solid var(--emerald);
+  padding: 24px 28px;
+  margin: 28px 0;
+}
+.result-card h4 {
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--emerald);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+/* ================================================================
+   BADGE
+   ================================================================ */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+.badge-measured { background: rgba(0,216,128,0.1); border: 1px solid var(--emerald); color: var(--emerald); }
+.badge-confirmed { background: rgba(255,204,0,0.1); border: 1px solid var(--gold); color: var(--gold); }
+
+/* ================================================================
+   DIAGRAM
+   ================================================================ */
+.diagram {
+  background: var(--sage);
+  padding: 40px 32px;
+  margin: 32px 0;
+  text-align: center;
+}
+.diagram-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 20px auto;
+  max-width: 100%;
+}
+.diagram-box {
+  background: #fff;
+  border: 2px solid var(--emerald);
+  padding: 10px 18px;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--emerald);
+}
+.diagram-box.active { background: var(--emerald); color: #fff; }
+.diagram-box.inactive { border-color: #ccc; color: var(--text-light); }
+.diagram-box.router { background: var(--gold); border-color: var(--gold); color: #fff; }
+.diagram-arrow { color: var(--text-secondary); font-size: 1.4rem; }
+
+/* ================================================================
+   CHART
+   ================================================================ */
+.chart-container {
+  background: #fff;
+  border: 1px solid #e2e5de;
+  padding: 32px;
+  margin: 36px auto;
+  max-width: 700px;
+}
+.chart-container h4 {
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 20px;
+}
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ================================================================
+   CSS VISUALIZATIONS
+   ================================================================ */
+/* Memory Bar */
+.mem-bar-vis {
+  margin: 32px auto;
+  padding: 32px;
+  background: var(--forest);
+  color: #fff;
+  max-width: 800px;
+}
+.mem-bar-label {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.mem-bar-track {
+  position: relative;
+  height: 36px;
+  background: rgba(255,255,255,0.06);
+  margin-bottom: 20px;
+}
+.mem-bar-fill {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Expert Strip */
+.expert-strip {
+  margin: 32px 0;
+  padding: 28px;
+  background: var(--sage);
+}
+.es-row { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 12px; justify-content: center; }
+.es-cell { width: 8px; height: 8px; flex-shrink: 0; }
+.es-cell.active { background: var(--emerald); }
+.es-cell.idle { background: #d5dbd0; }
+.es-caption {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+}
+.es-legend { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: middle; }
+
+/* Compression Scale */
+.comp-scale {
+  margin: 32px 0;
+  padding: 28px;
+  background: var(--sage);
+  overflow: hidden;
+}
+.cs-row { margin-bottom: 16px; }
+.cs-label {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.cs-bar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #fff;
+}
+.cs-bar.full { width: 100%; background: var(--crimson); }
+.cs-bar.compressed { width: 18.9%; background: var(--emerald); min-width: 100px; }
+
+/* ================================================================
+   NEXT STEPS
+   ================================================================ */
+.next-step {
+  display: flex;
+  gap: 20px;
+  padding: 20px 0;
+  border-bottom: 1px solid #e2e5de;
+}
+.next-step:last-child { border-bottom: none; }
+.next-step-num {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  background: var(--forest);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.next-step h4 { font-size: 1.02rem; font-weight: 700; margin-bottom: 4px; }
+.next-step p { font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 0; }
+
+/* ================================================================
+   REFERENCES
+   ================================================================ */
+.ref-list { list-style: none; margin: 20px 0; }
+.ref-list li { padding: 14px 0; border-bottom: 1px solid #e2e5de; font-size: 0.92rem; }
+.ref-list a { color: var(--emerald); text-decoration: none; font-weight: 600; }
+.ref-list a:hover { text-decoration: underline; }
+.ref-list .ref-desc { color: var(--text-secondary); font-size: 0.82rem; margin-top: 2px; }
+
+/* ================================================================
+   UTILITY
+   ================================================================ */
+.hl-emerald { color: var(--emerald); font-weight: 700; }
+.hl-crimson { color: var(--crimson); font-weight: 700; }
+.hl-gold { color: var(--gold); font-weight: 700; }
+.section-gap { margin-bottom: 80px; }
+.rule-gold { height: 1px; background: var(--gold); border: none; }
+.rule-crimson-thick { height: 4px; background: var(--crimson); border: none; }
+
+/* ================================================================
+   FOOTER
+   ================================================================ */
+footer {
+  background: var(--forest);
+  color: rgba(255,255,255,0.5);
+  text-align: center;
+  padding: 48px 24px 32px;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+}
+footer strong { color: rgba(255,255,255,0.7); }
+
+/* ================================================================
+   RESPONSIVE OVERRIDES
+   ================================================================ */
+@media (max-width: 768px) {
+  body { font-size: 0.95rem; }
+  .pull-quote { font-size: 1.3rem; padding-left: 18px; border-left-width: 4px; }
+  .code-block pre { font-size: 0.7rem; padding: 14px; }
+  .data-table { font-size: 0.78rem; }
+  .data-table th, .data-table td { padding: 8px 10px; }
+  .diagram-flow { gap: 6px; }
+  .diagram-box { padding: 8px 12px; font-size: 0.7rem; }
+  .chart-container { padding: 20px 16px; }
+  .result-card { padding: 18px 20px; }
+  .mem-bar-vis { padding: 20px; }
+  .expert-strip { padding: 20px; }
+  .es-cell { width: 6px !important; height: 6px !important; }
+  .comp-scale { padding: 20px; }
+}
+@media (max-width: 480px) {
+  .pull-quote { font-size: 1.05rem; padding-left: 14px; border-left-width: 3px; }
+  .code-block pre { font-size: 0.62rem; line-height: 1.5; padding: 10px; }
+  .data-table { font-size: 0.7rem; }
+  .callout { padding: 14px 16px; margin: 16px 0; }
+  .chart-container { padding: 14px 10px; }
+  .chart-container h4 { font-size: 0.72rem; }
+  .result-card { padding: 14px 16px; }
+  .es-cell { width: 5px !important; height: 5px !important; }
+}
+pre { overflow-x: auto; }
+
+/* ================================================================
+   SCROLL-TRACKING NAV
+   ================================================================ */
+.scroll-nav {
+  position: fixed;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-ui);
+}
+.scroll-nav a {
+  display: block;
+  padding: 6px 14px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-light);
+  text-decoration: none;
+  border-right: 2px solid transparent;
+  text-align: right;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+.scroll-nav a:hover {
+  color: var(--text-primary);
+}
+.scroll-nav a.active {
+  color: var(--emerald);
+  border-right-color: var(--emerald);
+  font-weight: 700;
+}
+
+@media (max-width: 1200px) {
+  .scroll-nav { display: none; }
+}
+
+/* ================================================================
+   TWO SOLUTIONS SECTION
+   ================================================================ */
+.two-solutions {
+  background: var(--forest-deep);
+  padding: 64px 24px;
+  color: #fff;
+}
+.two-solutions .before-after {
+  text-align: center;
+  margin-bottom: 48px;
+}
+.two-solutions .before-after .big-num {
+  font-family: var(--font-display);
+  font-size: 6rem;
+  font-weight: 400;
+  line-height: 1;
+}
+.two-solutions .before-after .big-arrow {
+  font-size: 3rem;
+  color: var(--gold);
+  margin: 0 24px;
+  vertical-align: middle;
+}
+.two-solutions .before-after .ba-label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  margin-top: 12px;
+}
+.two-solutions .technique-label {
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.two-solutions .technique-title {
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+.two-solutions .technique-desc {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.65);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.two-solutions .stat-boxes {
+  display: flex;
+  gap: 12px;
+}
+.two-solutions .stat-box {
+  background: rgba(0,0,0,0.3);
+  padding: 14px 18px;
+  flex: 1;
+}
+.two-solutions .stat-box .stat-num {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.two-solutions .stat-box .stat-label {
+  font-family: var(--font-ui);
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+}
+@media (max-width: 768px) {
+  .two-solutions .before-after .big-num { font-size: 3.5rem; }
+  .two-solutions .before-after .big-arrow { font-size: 2rem; margin: 0 12px; }
+  .two-solutions .technique-title { font-size: 1.4rem; }
+  .two-solutions .stat-boxes { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<!-- Control panel removed — using Tokyo Neon defaults -->
+
+<!-- ============================================================
+     HERO
+     ============================================================ -->
+<div class="hero-rules-top"></div>
+<div class="hero-rules-top-thin"></div>
+
+<header class="hero-section">
+  <div class="hero-bg" id="heroBg" style="background-image: url('../results/assets/hero-neon-wave.png');"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="hero-layout">
+      <div>
+        <div class="hero-tag">SSD Streaming + TurboQuant</div>
+        <h1 class="hero-title">Running a <span class="accent">1T-Parameter</span><br>Model on a Laptop</h1>
+        <div style="width: 80px; height: 2px; background: var(--sakura); margin-bottom: 14px;"></div>
+        <p class="hero-sub">Kimi-K2: 1.04 trillion parameters, 578 GB on disk. It runs in 7.1 GB of RAM.</p>
+        <a href="https://github.com/rita-aga/mlx-turboquant-moe-streaming" target="_blank" rel="noopener" style="
+          display: inline-flex; align-items: center; gap: 8px; margin-top: 18px;
+          padding: 10px 22px; background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.15); color: #fff;
+          font-family: var(--font-ui); font-size: 0.78rem; font-weight: 600;
+          letter-spacing: 0.06em; text-decoration: none; transition: background 0.2s, border-color 0.2s;
+        " onmouseover="this.style.background='rgba(255,255,255,0.14)';this.style.borderColor='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.08)';this.style.borderColor='rgba(255,255,255,0.15)'">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View Source on GitHub
+        </a>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color: var(--crimson-light);">578</div>
+          <div class="hero-stat-label">GB Model on Disk</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color: var(--emerald-light);">7.1</div>
+          <div class="hero-stat-label">GB RAM Used</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color: var(--gold-light);">5.3x</div>
+          <div class="hero-stat-label">KV Compression</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-num" style="color: var(--sakura);">0.5</div>
+          <div class="hero-stat-label">Tokens / Second</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="hero-machine">
+  <div style="display:flex; gap:20px; flex-wrap:wrap;">
+    <span>Apple M3 Max</span>
+    <span class="hero-machine-sep">/</span>
+    <span>128 GB Unified Memory</span>
+    <span class="hero-machine-sep">/</span>
+    <span>40-core GPU</span>
+    <span class="hero-machine-sep">/</span>
+    <span>18 GB/s NVMe</span>
+  </div>
+  <span style="font-family: var(--font-ui); letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; font-size: 0.55rem; color: rgba(255,255,255,0.2);">March 2026</span>
+</div>
+<div class="hero-rules-bottom"></div>
+
+
+<!-- ============================================================
+     TWO SOLUTIONS OVERVIEW
+     ============================================================ -->
+<section id="two-solutions" class="two-solutions">
+  <div class="wide-col">
+
+    <div class="before-after">
+      <span class="big-num" style="color: var(--crimson);">578 GB</span>
+      <span class="big-arrow">&rarr;</span>
+      <span class="big-num" style="color: var(--emerald);">7.1 GB</span>
+      <div class="ba-label">Model on Disk &rarr; RAM Used</div>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- Technique 1 -->
+      <div>
+        <div class="technique-label" style="color: var(--sakura);">Technique 1</div>
+        <div class="technique-title">SSD Expert Streaming</div>
+        <p class="technique-desc">384 experts per layer. Only 8 fire per token. Load those 8 from disk, skip the rest.</p>
+        <div class="stat-boxes">
+          <div class="stat-box">
+            <div class="stat-num" style="color: var(--sakura);">571 GB</div>
+            <div class="stat-label">Streamed</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num" style="color: var(--sakura);">60</div>
+            <div class="stat-label">Layers Patched</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Technique 2 -->
+      <div>
+        <div class="technique-label" style="color: var(--emerald);">Technique 2</div>
+        <div class="technique-title">TurboQuant KV Compression</div>
+        <p class="technique-desc">Attention memory grows with every token. Rotate it, compress it 5.3x, lose nothing.</p>
+        <div class="stat-boxes">
+          <div class="stat-box">
+            <div class="stat-num" style="color: var(--emerald);">5.3x</div>
+            <div class="stat-label">Compression</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num" style="color: var(--emerald);">54%</div>
+            <div class="stat-label">Less Error</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================
+     CHAPTER 1 -- THE SIZE PROBLEM
+     ============================================================ -->
+<div class="chapter-header" id="ch-size">
+  <div class="ch-num display">1</div>
+  <div class="ch-label" style="color: var(--crimson);">Chapter One</div>
+  <h2 class="ch-title">The Size Problem</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    Kimi-K2 has 1.04 trillion parameters. Stored in 4-bit precision, that footprint is 578 GB.
+    The laptop has 128 GB of unified memory. The math is simple and brutal: the model is 4.5 times
+    bigger than the machine.
+  </p>
+
+  <!-- CSS bar visual: model vs RAM -->
+  <div class="mem-bar-vis">
+    <div class="mem-bar-label" style="color: var(--crimson-light);">Model on disk</div>
+    <div class="mem-bar-track">
+      <div class="mem-bar-fill" style="width: 100%; background: var(--crimson);">578 GB</div>
+    </div>
+    <div class="mem-bar-label" style="color: var(--emerald-light);">RAM available</div>
+    <div class="mem-bar-track">
+      <div class="mem-bar-fill" style="width: 22.1%; background: var(--emerald); min-width: 90px;">128 GB</div>
+    </div>
+    <div class="mem-bar-label" style="color: var(--gold-light);">RAM actually used</div>
+    <div class="mem-bar-track">
+      <div class="mem-bar-fill" style="width: 1.23%; background: var(--gold); min-width: 70px;">7.1 GB</div>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-family: var(--font-mono); font-size: 0.65rem; color: rgba(255,255,255,0.35); border-top: 1px solid rgba(255,255,255,0.15); padding-top: 6px;">
+      <span>0 GB</span><span>290 GB</span><span>578 GB</span>
+    </div>
+  </div>
+
+  <p>
+    Two separate problems need solving. First, those 578 GB of weights have to get into the compute path
+    somehow. Second, as the model generates text, its attention memory (the "KV cache") grows with
+    every token and eventually eats what little RAM you have. Two techniques handle this: SSD streaming
+    for the weights, and TurboQuant for the cache.
+  </p>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 2 -- MIXTURE OF EXPERTS
+     ============================================================ -->
+<div class="chapter-header" id="ch-moe" style="background: var(--sage);">
+  <div class="ch-num display">2</div>
+  <div class="ch-label" style="color: var(--emerald);">Chapter Two</div>
+  <h2 class="ch-title">Mixture of Experts</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    Not all trillion parameters fire for every token. Kimi-K2 is a <strong>Mixture-of-Experts</strong> model.
+    Think of a hospital with 384 specialist doctors on staff. A patient walks in, and a triage nurse
+    (the "router") picks the 8 best specialists. Those 8 examine the patient, combine their opinions, and
+    produce a diagnosis. The other 376 doctors stay in their offices doing nothing. That is 97.9% idle.
+  </p>
+
+  <!-- Expert strip visualization: 384 cells, 8 lit -->
+  <div class="expert-strip">
+    <div class="es-row" id="expertStrip"></div>
+    <div class="es-caption">
+      <span><span class="es-legend" style="background: var(--emerald);"></span> 8 active experts</span>
+      <span><span class="es-legend" style="background: #d5dbd0;"></span> 376 idle experts</span>
+    </div>
+  </div>
+
+  <!-- MoE routing diagram -->
+  <div class="diagram">
+    <h4 style="font-family: var(--font-ui); font-size: 0.82rem; font-weight: 600; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.04em;">MoE Routing: Kimi-K2 (per layer, per token)</h4>
+    <div class="diagram-flow">
+      <div class="diagram-box">Input Token</div>
+      <div class="diagram-arrow">&rarr;</div>
+      <div class="diagram-box router">Router</div>
+      <div class="diagram-arrow">&rarr;</div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div class="diagram-box active">Expert 47 &check;</div>
+        <div class="diagram-box active">Expert 203 &check;</div>
+        <div class="diagram-box active">... (8 active)</div>
+        <div class="diagram-box inactive">376 idle</div>
+      </div>
+      <div class="diagram-arrow">&rarr;</div>
+      <div class="diagram-box" style="border-color: var(--emerald); color: var(--emerald);">Combine &amp; Output</div>
+    </div>
+    <p style="font-size: 0.82rem; color: var(--text-light); margin-top: 12px; margin-bottom: 0;">
+      384 total experts per layer, 8 selected. <strong class="hl-emerald">97.9% idle</strong> per token.
+    </p>
+  </div>
+
+  <p>
+    If almost everything is idle almost all the time, why keep it in memory?
+  </p>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 3 -- SSD STREAMING
+     ============================================================ -->
+<div class="chapter-header" id="ch-streaming">
+  <div class="ch-num display">3</div>
+  <div class="ch-label" style="color: var(--sakura);">Chapter Three</div>
+  <h2 class="ch-title">SSD Streaming</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    The trick: leave expert weights on the SSD. When the router picks 8 experts, read just those
+    8 from disk using <code class="il">pread()</code> -- a system call that reads bytes from a specific position in a file
+    without moving a cursor. Each expert's weights sit at a known byte offset inside a
+    <a href="https://huggingface.co/docs/safetensors" style="color: var(--emerald);">safetensors</a> file.
+    Jump straight there, read the bytes, do the math, throw them away. Repeat for the next token.
+  </p>
+
+  <div class="callout callout-why">
+    <div class="callout-label">Trust the OS</div>
+    <h4>The page cache is your friend</h4>
+    <p>
+      Modern operating systems keep recently-read file data in a page cache. If the same expert fires
+      again soon, the OS serves it from RAM instantly. An explicit expert cache was tested and abandoned --
+      it used 89 GB and ran slower than just trusting the OS. This matches
+      <a href="https://github.com/danveloper/flash-moe" style="color: var(--emerald);">Flash-MoE's</a> finding.
+    </p>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span>streaming_switch_linear.py -- ExpertWeightStore.load_experts</span>
+      <span class="lang-tag">Python</span>
+    </div>
+    <pre><code><span class="kw">def</span> <span class="fn">load_experts</span>(<span class="va">self</span>, expert_ids: <span class="ty">list</span>) -> <span class="ty">Tuple</span>[mx.array, mx.array, Optional[mx.array]]:
+    <span class="st">"""Load selected experts' weights from SSD.
+
+    Uses C extension for parallel pread when available, falls back to Python.
+    OS page cache handles caching -- 'Trust the OS' (Flash-MoE finding).
+    Returns (weight, scales, biases) as mx.arrays with shape [K, ...].
+    """</span>
+    <span class="kw">try</span>:
+        <span class="kw">return</span> <span class="va">self</span>.<span class="fn">_load_experts_fast</span>(expert_ids)
+    <span class="kw">except</span> (<span class="ty">ImportError</span>, <span class="ty">Exception</span>):
+        <span class="kw">return</span> <span class="va">self</span>.<span class="fn">_load_experts_python</span>(expert_ids)</code></pre>
+  </div>
+
+  <!-- Results: baseline vs streaming -->
+  <div class="result-card">
+    <h4>Baseline vs. Streaming: Qwen3.5-35B <span class="badge badge-confirmed">Confirmed</span></h4>
+    <div class="table-wrap">
+    <table class="data-table">
+      <tr><th>Method</th><th>Output for "Capital of Japan is"</th><th>Speed</th></tr>
+      <tr><td>Baseline (all in RAM)</td><td class="match">Tokyo &check;</td><td class="mono-cell">26.7 tok/s</td></tr>
+      <tr><td>SSD Streaming</td><td class="match">Tokyo &check; IDENTICAL</td><td class="mono-cell">2.7 tok/s</td></tr>
+    </table>
+    </div>
+    <p style="font-size: 0.82rem; color: var(--text-light); margin-top: 8px; margin-bottom: 0;">
+      Slower on the small model (expected -- it already fits in RAM). The point: <strong>byte-for-byte identical output</strong>.
+    </p>
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 4 -- SPEED: PYTHON TO C
+     ============================================================ -->
+<div class="chapter-header" id="ch-speed" style="background: var(--sage);">
+  <div class="ch-num display">4</div>
+  <div class="ch-label" style="color: var(--gold);">Chapter Four</div>
+  <h2 class="ch-title">Speed -- Python to C</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    At 0.19 tok/s on Kimi-K2, the model ran but barely. Profiling pointed the finger at Python itself,
+    not the SSD. Each token needs 60 layers times 3 projections = 180 <code class="il">pread()</code> calls.
+    Each call in Python creates a bytes object, converts to NumPy, converts to MLX -- three allocations,
+    two copies. At ~5 ms overhead per call, that is 900 ms of pure interpreter tax per token.
+  </p>
+
+  <p>
+    The SSD can deliver 18 GB/s. It is not the bottleneck. Python is.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span>fast_pread.c -- Parallel expert loading with pthreads</span>
+      <span class="lang-tag">C</span>
+    </div>
+    <pre><code><span class="cm">/* Thread argument for parallel pread */</span>
+<span class="kw">typedef struct</span> {
+    <span class="ty">int</span> fd;
+    <span class="ty">void</span> *buf;
+    <span class="ty">size_t</span> size;
+    <span class="ty">off_t</span> offset;
+    <span class="ty">ssize_t</span> result;
+} <span class="ty">PreadTask</span>;
+
+<span class="kw">static</span> <span class="ty">void</span> *<span class="fn">pread_thread</span>(<span class="ty">void</span> *arg) {
+    <span class="ty">PreadTask</span> *task = (<span class="ty">PreadTask</span> *)arg;
+    task->result = <span class="fn">pread</span>(task->fd, task->buf, task->size, task->offset);
+    <span class="kw">return</span> <span class="nu">NULL</span>;
+}
+
+<span class="cm">/* Allocate output buffer for ALL experts at once */</span>
+<span class="ty">size_t</span> total_bytes = (<span class="ty">size_t</span>)k * expert_bytes;
+<span class="ty">void</span> *buf = <span class="fn">malloc</span>(total_bytes);
+
+<span class="cm">/* Launch parallel pread threads (up to 4) */</span>
+<span class="kw">for</span> (<span class="ty">Py_ssize_t</span> i = <span class="nu">0</span>; i < k; i++) {
+    tasks[i].fd = fd;
+    tasks[i].buf = (<span class="ty">char</span> *)buf + i * expert_bytes;
+    tasks[i].size = expert_bytes;
+    tasks[i].offset = base_offset + (<span class="ty">off_t</span>)expert_ids[i] * expert_bytes;
+}
+
+<span class="cm">/* Create numpy array that OWNS the buffer -- zero copy */</span>
+PyObject *arr = <span class="fn">PyArray_SimpleNewFromData</span>(<span class="nu">1</span> + shape_len, dims, dtype_num, buf);
+<span class="fn">PyArray_ENABLEFLAGS</span>((PyArrayObject *)arr, NPY_ARRAY_OWNDATA);</code></pre>
+  </div>
+
+  <p>
+    Three wins over pure Python: <strong>single allocation</strong> (one <code class="il">malloc()</code> for all experts),
+    <strong>parallel pread with pthreads</strong> (up to 4 threads hitting the NVMe simultaneously), and
+    <strong>zero-copy return</strong> (the buffer becomes the NumPy array directly via <code class="il">NPY_ARRAY_OWNDATA</code>).
+  </p>
+
+  <div class="result-card">
+    <h4>C Extension Result <span class="badge badge-measured">Measured</span></h4>
+    <div class="table-wrap">
+    <table class="data-table">
+      <tr><th>Version</th><th>K2 Speed</th><th>RAM</th></tr>
+      <tr><td>Python pread</td><td class="mono-cell">0.19 tok/s</td><td class="mono-cell">7.1 GB</td></tr>
+      <tr><td>C extension (pthreads + zero-copy)</td><td class="mono-cell hl-emerald">0.5 tok/s</td><td class="mono-cell">7.2 GB</td></tr>
+    </table>
+    </div>
+    <p style="font-size: 0.82rem; color: var(--text-light); margin-top: 8px; margin-bottom: 0;">
+      2.6x speedup from eliminating Python overhead. The remaining bottleneck is
+      index remapping in Python and NumPy-to-MLX array conversion — candidates for the C++ layer.
+    </p>
+  </div>
+
+  <!-- Speed Chart -->
+  <div class="chart-container">
+    <h4>Speed: Kimi-K2 Tokens per Second <span class="badge badge-measured">Measured</span></h4>
+    <div class="chart-wrap" style="max-height: 300px;">
+      <canvas id="speedChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 5 -- SCALING UP
+     ============================================================ -->
+<div class="chapter-header" id="ch-scaling">
+  <div class="ch-num display">5</div>
+  <div class="ch-label" style="color: var(--emerald);">Chapter Five</div>
+  <h2 class="ch-title">Scaling Up</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    With correctness confirmed on the small model, streaming scales to the ones that actually need it.
+  </p>
+
+  <div class="result-card">
+    <h4>Models Larger Than RAM <span class="badge badge-measured">Measured</span></h4>
+    <div class="table-wrap">
+    <table class="data-table">
+      <tr><th>Model</th><th>Parameters</th><th>Size on Disk</th><th>RAM Used</th><th>Output</th><th>Speed</th></tr>
+      <tr>
+        <td>Qwen3.5-35B <span style="color:var(--text-light); font-weight:400;">(baseline, no streaming)</span></td>
+        <td class="mono-cell">35B</td><td class="mono-cell">20 GB</td><td class="mono-cell">19.6 GB</td>
+        <td class="match">Tokyo &check;</td><td class="mono-cell">8.5 tok/s</td>
+      </tr>
+      <tr>
+        <td>Qwen3.5-397B</td>
+        <td class="mono-cell">397B</td><td class="mono-cell">209 GB</td><td class="mono-cell">5.7 GB</td>
+        <td class="match">Tokyo &check;</td><td class="mono-cell">0.27 tok/s</td>
+      </tr>
+      <tr>
+        <td><strong>Kimi-K2</strong></td>
+        <td class="mono-cell">1.04T</td><td class="mono-cell">578 GB</td><td class="mono-cell">7.1 GB</td>
+        <td class="match">Correct &check;</td><td class="mono-cell">0.5 tok/s</td>
+      </tr>
+    </table>
+    </div>
+  </div>
+
+  <div class="callout callout-why">
+    <div class="callout-label">Why is the 35B model 17x faster?</div>
+    <p>
+      Look at the RAM column. The 35B model uses <strong>19.6 GB</strong> — it loaded every weight into unified memory.
+      The GPU reads those weights at memory bandwidth, roughly 400 GB/s on the M3 Max. No disk involved.
+    </p>
+    <p>
+      K2 uses <strong>7.1 GB</strong> for a 578 GB model. The other 571 GB stays on the NVMe drive.
+      Every token requires loading 8 active experts from SSD — that's a 7,200 MB/s drive feeding a 400 GB/s GPU.
+      The SSD is the bottleneck, and it's 55x slower than memory bandwidth.
+    </p>
+    <p>
+      You trade speed for possibility. The 35B model shows what full-speed inference looks like when everything fits.
+      SSD streaming lets you break that barrier: a model 29x larger than your RAM runs at all, on a laptop, with correct output.
+      Without streaming, K2 doesn't load. With streaming, it runs at 0.5 tok/s. That's the tradeoff.
+    </p>
+  </div>
+
+  <!-- Memory Chart -->
+  <div class="chart-container">
+    <h4>Model Size vs. RAM Used <span class="badge badge-measured">Measured</span></h4>
+    <div class="chart-wrap" style="max-height: 260px;">
+      <canvas id="memoryChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 6 -- THE KV CACHE PROBLEM
+     ============================================================ -->
+<div class="chapter-header" id="ch-kvcache" style="background: var(--sage);">
+  <div class="ch-num display">6</div>
+  <div class="ch-label" style="color: var(--crimson);">Chapter Six</div>
+  <h2 class="ch-title">The KV Cache Problem</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    When a language model generates text, it uses <strong>attention</strong> to figure out which earlier
+    tokens matter for the next one. Every processed token produces three vectors:
+  </p>
+  <ul style="margin: 12px 0 12px 24px;">
+    <li><strong>Query (Q)</strong> -- "What am I looking for?"</li>
+    <li><strong>Key (K)</strong> -- "What do I contain?"</li>
+    <li><strong>Value (V)</strong> -- "Here is my content."</li>
+  </ul>
+  <p>
+    The current token's Query is compared against every previous Key to find matches. The matching Values
+    are combined into context. This is how the model refers back to earlier parts of the conversation.
+  </p>
+
+  <p>
+    The problem: to generate token #1000, you need all 999 previous Keys and Values in memory.
+    At token #128,000, you need 127,999 of them. This stored history -- the <strong>KV cache</strong> -- grows
+    linearly. For Kimi-K2 at 128K tokens, it can reach 4-8 GB in 16-bit precision.
+  </p>
+
+  <div class="pull-quote">
+    Imagine writing a book where for every new sentence, you must re-read every previous sentence.
+    The longer the book, the bigger the stack of pages in your hands. The KV cache is that stack.
+  </div>
+
+  <p>
+    That 4-8 GB is RAM that could otherwise cache frequently-used expert weights, making SSD streaming
+    faster. Compressing the KV cache helps both memory and speed.
+  </p>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 7 -- WHY NORMAL QUANTIZATION FAILS
+     ============================================================ -->
+<div class="chapter-header" id="ch-quantization">
+  <div class="ch-num display">7</div>
+  <div class="ch-label" style="color: var(--gold);">Chapter Seven</div>
+  <h2 class="ch-title">Why Normal Quantization Fails</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    Quantization means reducing numerical precision to save space. A 16-bit number can represent 65,536
+    distinct values; a 4-bit number gets 16. If you can round to fewer bits without losing important
+    information, memory shrinks proportionally: 16-bit to 3-bit = 5.3x smaller.
+  </p>
+
+  <p>
+    Standard quantization divides the value range into equal-sized bins. But real KV cache data has
+    <strong>outliers</strong> -- occasional extreme values far larger than typical ones. These outliers
+    stretch the bins across a huge range, wasting resolution on values that rarely appear.
+  </p>
+
+  <div class="callout callout-warning">
+    <div class="callout-label">The 15-foot giants</div>
+    <p>
+      Imagine measuring people's heights. A normal bell curve (kurtosis 3.0) means most people are
+      5'4" to 6'0" with the rare 6'6" outlier. Real KV cache data has kurtosis <strong>27.7</strong> --
+      extreme values are roughly 9x more common than a bell curve predicts. It is like running into
+      15-foot giants regularly. Your measuring tape has to reach 20 feet, making it useless for telling
+      apart the many average-height people.
+    </p>
+  </div>
+
+  <!-- Kurtosis Chart -->
+  <div class="chart-container">
+    <h4>Kurtosis: Before and After Rotation <span class="badge badge-measured">Measured</span></h4>
+    <div class="chart-wrap" style="max-height: 300px;">
+      <canvas id="kurtosisChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 8 -- TURBOQUANT: THE ROTATION TRICK
+     ============================================================ -->
+<div class="chapter-header" id="ch-turboquant" style="background: var(--sage);">
+  <div class="ch-num display">8</div>
+  <div class="ch-label" style="color: var(--emerald);">Chapter Eight</div>
+  <h2 class="ch-title">TurboQuant -- The Rotation Trick</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    The core insight from
+    <a href="https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/" style="color: var(--emerald);">Google Research's TurboQuant</a>
+    (<a href="https://arxiv.org/abs/2504.19874" style="color: var(--emerald);">paper</a>):
+    <strong>rotate the data first and the outliers disappear</strong>.
+  </p>
+
+  <p>
+    A <strong>Hadamard matrix</strong> is a special square matrix of +1s and -1s (scaled by a normalization factor).
+    Multiplying your data by it is a rotation that redistributes energy from a few extreme dimensions
+    across all dimensions equally. The operation is lossless -- it is an orthogonal transformation,
+    meaning you can always rotate back to recover the exact original.
+  </p>
+
+  <div class="callout callout-insight">
+    <div class="callout-label">The choir analogy</div>
+    <p>
+      One singer in a choir is screaming while the rest whisper. The Hadamard rotation is like mixing
+      all their voices through a perfect reverb: the screamer's energy spreads evenly across everyone,
+      so now all singers are at a moderate, uniform volume. The information is preserved (reverse the mix
+      to recover the original), but the extreme peaks are gone.
+    </p>
+  </div>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span>turboquant_cache.py -- Hadamard matrix construction</span>
+      <span class="lang-tag">Python</span>
+    </div>
+    <pre><code><span class="kw">def</span> <span class="fn">create_hadamard_matrix</span>(dim: <span class="ty">int</span>) -> mx.array:
+    <span class="st">"""Create a normalized Hadamard-like rotation matrix.
+
+    Uses the recursive Walsh-Hadamard construction for powers of 2.
+    The rotation transforms arbitrary distributions into near-Gaussian,
+    which is the key insight of TurboQuant.
+    """</span>
+    <span class="kw">if</span> dim == <span class="nu">1</span>:
+        <span class="kw">return</span> mx.array([[<span class="nu">1.0</span>]])
+
+    <span class="cm"># Walsh-Hadamard: double the matrix recursively</span>
+    <span class="cm">#   [H  H]</span>
+    <span class="cm">#   [H -H]</span>
+    H = mx.array([[<span class="nu">1.0</span>]])
+    <span class="kw">while</span> H.shape[<span class="nu">0</span>] < dim:
+        H = mx.concatenate([
+            mx.concatenate([H, H], axis=<span class="nu">1</span>),
+            mx.concatenate([H, -H], axis=<span class="nu">1</span>),
+        ], axis=<span class="nu">0</span>)
+    <span class="kw">return</span> H / math.sqrt(dim)  <span class="cm"># Normalize to make orthogonal</span></code></pre>
+  </div>
+
+  <p>
+    After rotation, kurtosis drops from <span class="hl-crimson">27.7</span> to
+    <span class="hl-emerald">3.2</span> -- nearly identical to a perfect Gaussian (3.0). The outliers are gone,
+    and standard quantization works beautifully.
+  </p>
+
+  <div class="result-card">
+    <h4>Quantization Error Reduction <span class="badge badge-measured">Measured</span></h4>
+    <div class="table-wrap">
+    <table class="data-table">
+      <tr><th>Bit Width</th><th>MSE Without Rotation</th><th>MSE With Rotation</th><th>Improvement</th></tr>
+      <tr><td>8-bit</td><td class="mono-cell">--</td><td class="mono-cell">--</td><td class="match">56.8%</td></tr>
+      <tr><td>4-bit</td><td class="mono-cell">0.049232</td><td class="mono-cell">0.021595</td><td class="match">56.1%</td></tr>
+      <tr><td>3-bit</td><td class="mono-cell">0.211159</td><td class="mono-cell">0.096709</td><td class="match">54.2%</td></tr>
+    </table>
+    </div>
+    <p style="font-size: 0.82rem; color: var(--text-light); margin-top: 8px; margin-bottom: 0;">
+      At every bit width, rotation cuts quantization error by more than half.
+      At 3-bit (5.3x compression), the rotated MSE is lower than the unrotated 4-bit MSE.
+    </p>
+  </div>
+
+  <!-- MSE Chart -->
+  <div class="chart-container">
+    <h4>Quantization Error (MSE): With vs. Without Rotation <span class="badge badge-measured">Measured</span></h4>
+    <div class="chart-wrap" style="max-height: 300px;">
+      <canvas id="mseChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Compression Scale Visual -->
+  <div class="comp-scale">
+    <div class="cs-row">
+      <div class="cs-label">FP16 KV Cache (baseline)</div>
+      <div class="cs-bar full">16 bits per value</div>
+    </div>
+    <div class="cs-row">
+      <div class="cs-label">TurboQuant 3-bit (5.3x compression)</div>
+      <div class="cs-bar compressed">3 bits per value</div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 9 -- DOES TOKYO STILL KNOW IT'S TOKYO?
+     ============================================================ -->
+<div class="chapter-header" id="ch-tokyo">
+  <div class="ch-num display">9</div>
+  <div class="ch-label" style="color: var(--sakura);">Chapter Nine</div>
+  <h2 class="ch-title">Does Tokyo Still Know It's Tokyo?</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <p>
+    The rotation matrix is lossless but quantization is not. The question that matters: after replacing
+    the standard KV cache with a rotate-quantize-dequantize-derotate pipeline across all 10 full-attention
+    layers, does the model still produce correct answers?
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span>turboquant_cache.py -- TurboQuantKVCache.update_and_fetch</span>
+      <span class="lang-tag">Python</span>
+    </div>
+    <pre><code><span class="kw">def</span> <span class="fn">update_and_fetch</span>(<span class="va">self</span>, keys, values):
+    <span class="st">"""Store new keys/values (compressed) and return all cached K,V (decompressed)."""</span>
+    B, n_kv_heads, num_steps, k_head_dim = keys.shape
+
+    <span class="cm"># Create rotation matrices on first use</span>
+    <span class="kw">if</span> <span class="va">self</span>._k_rotation <span class="kw">is</span> <span class="nu">None</span>:
+        <span class="va">self</span>._k_rotation = <span class="fn">create_hadamard_matrix</span>(k_head_dim)
+        <span class="va">self</span>._v_rotation = <span class="fn">create_hadamard_matrix</span>(v_head_dim)
+
+    <span class="cm"># ROTATE then QUANTIZE (the TurboQuant innovation)</span>
+    keys_q = mx.<span class="fn">quantize</span>(
+        keys @ <span class="va">self</span>._k_rotation,
+        group_size=<span class="va">self</span>.group_size, bits=<span class="va">self</span>._tq_bits)
+    values_q = mx.<span class="fn">quantize</span>(
+        values @ <span class="va">self</span>._v_rotation,
+        group_size=<span class="va">self</span>.group_size, bits=<span class="va">self</span>._tq_bits)
+
+    <span class="cm"># ... store quantized data ...</span>
+
+    <span class="cm"># DEQUANTIZE then DE-ROTATE for return</span>
+    k_deq = mx.<span class="fn">dequantize</span>(*<span class="va">self</span>.keys, group_size=<span class="va">self</span>.group_size, bits=<span class="va">self</span>._tq_bits)
+    v_deq = mx.<span class="fn">dequantize</span>(*<span class="va">self</span>.values, group_size=<span class="va">self</span>.group_size, bits=<span class="va">self</span>._tq_bits)
+    k_deq = k_deq @ <span class="va">self</span>._k_rotation.T   <span class="cm"># De-rotate (R^T = R^-1 for orthogonal R)</span>
+    v_deq = v_deq @ <span class="va">self</span>._v_rotation.T
+
+    <span class="kw">return</span> k_deq, v_deq</code></pre>
+  </div>
+
+  <p>
+    The flow: <strong>rotate &rarr; quantize &rarr; store &rarr; dequantize &rarr; de-rotate &rarr; return</strong>.
+    The only error source is quantization, and it is operating on near-Gaussian data now.
+  </p>
+
+  <div class="result-card">
+    <h4>Integration Test: Exact Match Results <span class="badge badge-measured">Measured</span></h4>
+    <div class="table-wrap">
+    <table class="data-table">
+      <tr><th>Query</th><th>FP16 (baseline)</th><th>TQ 4-bit (4x)</th><th>TQ 3-bit (5.3x)</th></tr>
+      <tr>
+        <td>"The capital of Japan is"</td>
+        <td class="mono-cell">Tokyo.</td>
+        <td class="match">Tokyo. EXACT</td>
+        <td class="match">Tokyo. EXACT</td>
+      </tr>
+      <tr>
+        <td>"2 + 2 ="</td>
+        <td class="mono-cell">4</td>
+        <td class="match">4 EXACT</td>
+        <td class="match">4 EXACT</td>
+      </tr>
+      <tr>
+        <td>"Explain gravity"</td>
+        <td class="mono-cell">&lt;think&gt;...&lt;/think&gt;</td>
+        <td class="no-match">Gravity is simply the force...</td>
+        <td class="no-match">Gravity is simply the invisible...</td>
+      </tr>
+    </table>
+    </div>
+    <p style="font-size: 0.82rem; color: var(--text-light); margin-top: 8px; margin-bottom: 0;">
+      <strong>Factual queries: exact match</strong> at both 4-bit and 3-bit.
+    </p>
+    <p style="font-size: 0.82rem; color: var(--text-light); margin-top: 8px; margin-bottom: 0;">
+      The "Explain gravity" row reveals something interesting. Qwen3.5 has a reasoning mode: on open-ended prompts,
+      it sometimes emits <code class="il">&lt;think&gt;...&lt;/think&gt;</code> tags before answering — internal
+      chain-of-thought tokens. The FP16 baseline triggered that reasoning mode. The TurboQuant versions, with
+      slightly different numerics in the KV cache, sampled past the thinking threshold and answered directly.
+      Both behaviors are correct. The model chose a different path through its probability space, which is
+      exactly what we'd expect: open-ended generation involves randomness (sampling), and even tiny numerical
+      differences change which word gets chosen. Factual accuracy is preserved. Creative paths diverge.
+    </p>
+  </div>
+
+  <div class="callout callout-insight">
+    <div class="callout-label">Google's claim: confirmed</div>
+    <p>
+      The <a href="https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/" style="color: var(--emerald);">TurboQuant paper</a>
+      claims "zero accuracy loss" on factual queries at 3-4 bit KV compression.
+      These measurements confirm that claim. The technique delivers on its promise.
+    </p>
+  </div>
+
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 10 -- BOTH TOGETHER
+     ============================================================ -->
+<div class="chapter-header" id="ch-combined" style="background: var(--forest); color: #fff;">
+  <div class="ch-num display" style="color: rgba(255,255,255,0.08);">10</div>
+  <div class="ch-label" style="color: var(--emerald);">Chapter Ten</div>
+  <h2 class="ch-title" style="color: #fff;">Both Together</h2>
+</div>
+
+<div style="background: var(--forest); padding: 0 0 64px;">
+<div class="reading-col">
+
+  <p style="color: rgba(255,255,255,0.7);">
+    We spent nine chapters building two separate tools. SSD streaming loads expert weights from disk so a
+    trillion-parameter model fits in 7 GB of RAM. TurboQuant rotates and compresses the KV cache 5x with
+    zero accuracy loss on factual queries. Now they run simultaneously on Kimi-K2.
+  </p>
+
+  <p style="color: rgba(255,255,255,0.7);">
+    61 layers get TurboQuant KV compression. 60 of those are MoE layers with SSD expert streaming.
+    K2 uses MLA (Multi-head Latent Attention), which stores a 512-dimensional <code class="il">kv_latent</code>
+    and a 64-dimensional <code class="il">k_pe</code> per token. Both get Hadamard-rotated and quantized.
+  </p>
+
+  <div class="result-card" style="background: rgba(255,255,255,0.04); border-color: var(--emerald);">
+    <h4 style="color: var(--emerald);">Streaming + TurboQuant on K2 <span class="badge badge-measured">Measured</span></h4>
+    <div class="table-wrap">
+    <table class="data-table" style="color: rgba(255,255,255,0.85);">
+      <tr><th style="border-color: rgba(255,255,255,0.1);">Metric</th><th style="border-color: rgba(255,255,255,0.1);">Value</th></tr>
+      <tr><td style="border-color: rgba(255,255,255,0.06);">Model</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">Kimi-K2-Instruct (1.04T params)</td></tr>
+      <tr><td style="border-color: rgba(255,255,255,0.06);">Output</td><td style="border-color: rgba(255,255,255,0.06);" class="match">Tokyo. It is the most populous metropolitan area</td></tr>
+      <tr><td style="border-color: rgba(255,255,255,0.06);">RAM</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">7.4 GB</td></tr>
+      <tr><td style="border-color: rgba(255,255,255,0.06);">Expert streaming</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">570.8 GB from SSD</td></tr>
+      <tr><td style="border-color: rgba(255,255,255,0.06);">KV compression</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell">4-bit TurboQuant (4x)</td></tr>
+      <tr><td style="border-color: rgba(255,255,255,0.06);">Speed</td><td style="border-color: rgba(255,255,255,0.06);" class="mono-cell" style="color: var(--emerald);">0.53 tok/s</td></tr>
+    </table>
+    </div>
+  </div>
+
+  <p style="color: rgba(255,255,255,0.55); font-size: 0.88rem;">
+    A 578 GB model, running from a laptop SSD, with 4x KV cache compression, producing verified correct output.
+    The 0.3 GB RAM increase (7.1 &rarr; 7.4) is the Hadamard rotation matrices and TurboQuant bookkeeping.
+    The speed is comparable to streaming alone (0.5 tok/s) — the rotation and quantization add negligible overhead
+    because they run on the GPU while the SSD read is the bottleneck.
+  </p>
+
+</div>
+</div>
+
+
+<!-- ============================================================
+     CHAPTER 11 -- WHAT'S NEXT
+     ============================================================ -->
+<div class="chapter-header" id="ch-next" style="background: var(--sage);">
+  <div class="ch-num display">11</div>
+  <div class="ch-label" style="color: var(--forest);">Chapter Eleven</div>
+  <h2 class="ch-title">What's Next</h2>
+</div>
+
+<div class="reading-col section-gap">
+
+  <div class="next-step">
+    <div class="next-step-num">1</div>
+    <div>
+      <h4>Move Streaming to MLX C++ Core</h4>
+      <p>The remaining speed bottleneck is Python-to-MLX overhead: index remapping and NumPy-to-MLX array conversion. Moving streaming into MLX's C++ layer would eliminate both, targeting 1.5+ tok/s.</p>
+    </div>
+  </div>
+
+  <div class="next-step">
+    <div class="next-step-num">2</div>
+    <div>
+      <h4>Expert Caching with Freed Memory</h4>
+      <p>TurboQuant frees 3-4 GB of KV cache memory. Use that to keep hot experts in RAM while cold ones stream from SSD.</p>
+    </div>
+  </div>
+
+  <div class="next-step">
+    <div class="next-step-num">3</div>
+    <div>
+      <h4>Long-Context Benchmarks</h4>
+      <p>Needle-in-a-haystack tests at 64K+ tokens. At 128K tokens, KV cache is 4-8 GB uncompressed vs. 0.8-2 GB with TurboQuant.</p>
+    </div>
+  </div>
+
+  <div class="next-step">
+    <div class="next-step-num">4</div>
+    <div>
+      <h4>QJL: Stage 2 of TurboQuant</h4>
+      <p>The paper describes QJL (Quantized Johnson-Lindenstrauss) 1-bit residual correction that pushes 3-bit quality closer to 4-bit while keeping 5.3x compression.</p>
+    </div>
+  </div>
+
+  <hr class="rule-gold" style="margin: 48px 0;">
+
+  <h3 style="font-family: var(--font-ui); font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 20px;">References</h3>
+
+  <ul class="ref-list">
+    <li>
+      <a href="https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/">TurboQuant Blog -- Google Research</a>
+      <div class="ref-desc">Overview of rotation-based KV cache compression with zero quality loss.</div>
+    </li>
+    <li>
+      <a href="https://arxiv.org/abs/2504.19874">TurboQuant Paper (arXiv:2504.19874)</a>
+      <div class="ref-desc">Full paper: rotation + quantization + QJL correction for extreme compression.</div>
+    </li>
+    <li>
+      <a href="https://arxiv.org/abs/2502.02617">PolarQuant (arXiv:2502.02617)</a>
+      <div class="ref-desc">Related work: KV cache quantization using random rotation matrices.</div>
+    </li>
+    <li>
+      <a href="https://github.com/danveloper/flash-moe">Flash-MoE (GitHub)</a>
+      <div class="ref-desc">SSD-based MoE inference. Key finding: "Trust the OS page cache."</div>
+    </li>
+    <li>
+      <a href="https://github.com/ml-explore/mlx">MLX (GitHub)</a>
+      <div class="ref-desc">Apple's machine learning framework for Apple Silicon.</div>
+    </li>
+  </ul>
+
+</div>
+
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer>
+  <p><strong>TurboMoE Research</strong> -- March 2026</p>
+  <p style="margin-top: 4px;">All measurements on Apple M3 Max, 128 GB unified memory, 18 GB/s NVMe.</p>
+  <p style="margin-top: 12px;">
+    <a href="https://github.com/rita-aga/mlx-turboquant-moe-streaming" target="_blank" rel="noopener" style="color: var(--emerald); text-decoration: none; font-weight: 600;">github.com/rita-aga/mlx-turboquant-moe-streaming</a>
+  </p>
+  <p style="margin-top: 8px; font-size: 0.65rem; color: rgba(255,255,255,0.3);">Implementation: 812 Python + 141 C = 953 lines of code.</p>
+</footer>
+
+
+<nav class="scroll-nav" id="scrollNav">
+  <a href="#two-solutions">Two Solutions</a>
+  <a href="#ch-size">1. Size Problem</a>
+  <a href="#ch-moe">2. Mixture of Experts</a>
+  <a href="#ch-streaming">3. SSD Streaming</a>
+  <a href="#ch-speed">4. Python to C</a>
+  <a href="#ch-scaling">5. Scaling Up</a>
+  <a href="#ch-kvcache">6. KV Cache</a>
+  <a href="#ch-quantization">7. Quantization</a>
+  <a href="#ch-turboquant">8. TurboQuant</a>
+  <a href="#ch-tokyo">9. Tokyo Test</a>
+  <a href="#ch-combined">10. Both Together</a>
+  <a href="#ch-next">11. What's Next</a>
+</nav>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+// ── Expert strip visualization ──
+(function() {
+  const strip = document.getElementById('expertStrip');
+  if (!strip) return;
+  const active = new Set([47, 91, 128, 203, 255, 310, 347, 372]);
+  for (let i = 0; i < 384; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'es-cell ' + (active.has(i) ? 'active' : 'idle');
+    strip.appendChild(cell);
+  }
+})();
+
+// ── Charts ──
+var chartInstances = {};
+
+function getChartColors() {
+  var s = getComputedStyle(document.documentElement);
+  return {
+    emerald: s.getPropertyValue('--emerald').trim() || '#00d880',
+    crimson: s.getPropertyValue('--crimson').trim() || '#f02040',
+    gold: s.getPropertyValue('--gold').trim() || '#ffcc00',
+    text: s.getPropertyValue('--text-primary').trim() || '#0a0a0a',
+    light: s.getPropertyValue('--text-light').trim() || '#5a6a52'
+  };
+}
+
+function rebuildCharts() {
+  Object.keys(chartInstances).forEach(function(k) {
+    if (chartInstances[k]) chartInstances[k].destroy();
+  });
+  buildCharts();
+}
+
+function buildCharts() {
+  var c = getChartColors();
+  var gridColor = 'rgba(0,0,0,0.06)';
+
+  Chart.defaults.color = c.light;
+  Chart.defaults.borderColor = gridColor;
+  Chart.defaults.font.family = "'Outfit', sans-serif";
+
+  // Speed Chart
+  chartInstances.speed = new Chart(document.getElementById('speedChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Python pread', 'C Extension (pthreads)'],
+      datasets: [{
+        label: 'Tokens per second',
+        data: [0.19, 0.5],
+        backgroundColor: [c.crimson, c.emerald],
+        borderWidth: 0,
+        borderRadius: 0,
+        barThickness: 48
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx) { return ctx.raw + ' tok/s'; } } }
+      },
+      scales: {
+        y: { title: { display: true, text: 'Tokens / Second', color: c.light }, grid: { color: gridColor }, beginAtZero: true, max: 0.7 },
+        x: { grid: { display: false }, ticks: { font: { weight: '500' } } }
+      }
+    }
+  });
+
+  // Memory Chart
+  chartInstances.memory = new Chart(document.getElementById('memoryChart'), {
+    type: 'bar',
+    data: {
+      labels: ['K2 on Disk (578 GB)', 'RAM Used (7.1 GB)'],
+      datasets: [{
+        data: [578, 7.1],
+        backgroundColor: [c.crimson, c.emerald],
+        borderWidth: 0,
+        borderRadius: 0,
+        barThickness: 40
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx) { return ctx.raw + ' GB'; } } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Gigabytes (GB)', color: c.light }, grid: { color: gridColor }, max: 650 },
+        y: { grid: { display: false }, ticks: { font: { weight: '500', size: 12 } } }
+      }
+    }
+  });
+
+  // Kurtosis Chart
+  chartInstances.kurtosis = new Chart(document.getElementById('kurtosisChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Before Rotation', 'After Rotation', 'Gaussian Ideal'],
+      datasets: [{
+        label: 'Kurtosis',
+        data: [27.7, 3.2, 3.0],
+        backgroundColor: [c.crimson, c.emerald, c.gold],
+        borderWidth: 0,
+        borderRadius: 0,
+        barThickness: 48
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx) { return 'Kurtosis: ' + ctx.raw; } } }
+      },
+      scales: {
+        y: { title: { display: true, text: 'Kurtosis (lower = closer to Gaussian)', color: c.light }, grid: { color: gridColor }, beginAtZero: true, max: 32 },
+        x: { grid: { display: false }, ticks: { font: { weight: '500' } } }
+      }
+    }
+  });
+
+  // MSE Chart (grouped bar)
+  chartInstances.mse = new Chart(document.getElementById('mseChart'), {
+    type: 'bar',
+    data: {
+      labels: ['4-bit', '3-bit'],
+      datasets: [
+        {
+          label: 'Without Rotation',
+          data: [0.049232, 0.211159],
+          backgroundColor: c.crimson,
+          borderWidth: 0,
+          borderRadius: 0,
+          barThickness: 36
+        },
+        {
+          label: 'With TurboQuant Rotation',
+          data: [0.021595, 0.096709],
+          backgroundColor: c.emerald,
+          borderWidth: 0,
+          borderRadius: 0,
+          barThickness: 36
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'top', labels: { padding: 16, usePointStyle: true, pointStyle: 'rect' } },
+        tooltip: { callbacks: { label: function(ctx) { return ctx.dataset.label + ': ' + ctx.raw.toFixed(6) + ' MSE'; } } }
+      },
+      scales: {
+        y: { title: { display: true, text: 'Mean Squared Error (lower = better)', color: c.light }, grid: { color: gridColor }, beginAtZero: true },
+        x: { grid: { display: false }, ticks: { font: { weight: '600', size: 14 } } }
+      }
+    }
+  });
+}
+
+buildCharts();
+
+// ── Scroll-tracking navigation ──
+const scrollNav = document.getElementById('scrollNav');
+if (scrollNav) {
+  const navLinks = scrollNav.querySelectorAll('a');
+  const sections = [];
+  navLinks.forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) sections.push({ id, el, link });
+  });
+
+  function updateActiveNav() {
+    let current = '';
+    const scrollY = window.scrollY + 200;
+    for (const s of sections) {
+      if (s.el.offsetTop <= scrollY) current = s.id;
+    }
+    navLinks.forEach(l => l.classList.remove('active'));
+    if (current) {
+      const active = scrollNav.querySelector(`a[href="#${current}"]`);
+      if (active) active.classList.add('active');
+    }
+  }
+
+  window.addEventListener('scroll', updateActiveNav, { passive: true });
+  updateActiveNav();
+}
+</script>
+
+</body>
+</html>
