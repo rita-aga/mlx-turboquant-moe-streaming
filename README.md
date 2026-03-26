@@ -2,7 +2,7 @@
 
 **An experiment in running trillion-parameter models on a MacBook.**
 
-Read the full interactive report: **[trillion-on-a-laptop.vercel.app](https://trillion-on-a-laptop.vercel.app)**
+Read the full interactive report: **[your-ssd-is-a-gpu.vercel.app](https://your-ssd-is-a-gpu.vercel.app)**
 
 > **This is a research experiment, not production software.** The code works, the measurements are real, but the interfaces are rough and the error handling is minimal. Best way to use this: give the repo to your coding agent (Claude Code, Cursor, Copilot). It will know what to do.
 
