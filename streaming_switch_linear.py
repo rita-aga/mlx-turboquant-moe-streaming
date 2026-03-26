@@ -70,22 +70,55 @@ class ExpertWeightStore:
         self._s_fd = os.open(scales_file, os.O_RDONLY)
         self._b_fd = os.open(biases_file, os.O_RDONLY) if biases_file else -1
 
-        # Expert LRU cache: keep recently-used experts in RAM
-        self._cache = {}  # expert_id -> (weight, scales, biases) as mx.arrays
-        self._cache_order = []  # LRU order
-        self._cache_max = 32  # Keep up to 32 experts cached per projection
+        # Expert LRU cache: OrderedDict for O(1) move-to-end
+        from collections import OrderedDict
+        self._cache = OrderedDict()  # expert_id -> (weight, scales, biases) as mx.arrays
+        self._cache_max = 128  # Must be >= max unique experts per call
 
     def load_experts(self, expert_ids: list) -> Tuple[mx.array, mx.array, Optional[mx.array]]:
-        """Load selected experts' weights from SSD.
+        """Load selected experts, serving from LRU cache when possible.
 
-        Uses C extension for parallel pread when available, falls back to Python.
-        OS page cache handles caching — "Trust the OS" (Flash-MoE finding).
+        Cache hits skip SSD entirely. Only cache misses go to pread.
         Returns (weight, scales, biases) as mx.arrays with shape [K, ...].
         """
-        try:
-            return self._load_experts_fast(expert_ids)
-        except (ImportError, Exception):
-            return self._load_experts_python(expert_ids)
+        ids = [int(i) for i in expert_ids]
+        cache = self._cache
+
+        # Check what we need to load
+        miss_ids = [eid for eid in ids if eid not in cache]
+
+        # Load misses from SSD (if any)
+        if miss_ids:
+            try:
+                miss_w, miss_s, miss_b = self._load_experts_fast(miss_ids)
+            except (ImportError, Exception):
+                miss_w, miss_s, miss_b = self._load_experts_python(miss_ids)
+
+            # Insert misses into cache
+            for i, eid in enumerate(miss_ids):
+                cache[eid] = (
+                    miss_w[i:i+1],
+                    miss_s[i:i+1],
+                    miss_b[i:i+1] if miss_b is not None else None,
+                )
+
+        # Touch all requested experts (mark as recently used)
+        for eid in ids:
+            cache.move_to_end(eid)
+
+        # Evict oldest AFTER we've touched everything we need
+        while len(cache) > self._cache_max:
+            cache.popitem(last=False)
+
+        # Gather results
+        w_list = [cache[eid][0] for eid in ids]
+        s_list = [cache[eid][1] for eid in ids]
+        b_list = [cache[eid][2] for eid in ids]
+        weight = mx.concatenate(w_list, axis=0)
+        scales = mx.concatenate(s_list, axis=0)
+        biases = mx.concatenate(b_list, axis=0) if b_list[0] is not None else None
+
+        return weight, scales, biases
 
     def _load_experts_fast(self, expert_ids: list) -> Tuple[mx.array, mx.array, Optional[mx.array]]:
         """Fast C extension path: parallel pread with zero-copy numpy."""
@@ -228,14 +261,14 @@ class StreamingSwitchGLU(nn.Module):
     def __call__(self, x, indices) -> mx.array:
         x = mx.expand_dims(x, (-2, -3))
 
-        # Index remapping + expert loading
-        idx_np = np.array(indices)
-        unique_ids = np.unique(idx_np.flatten()).tolist()
-        max_id = max(unique_ids) + 1
-        remap = np.empty(max_id, dtype=np.int32)
-        for i, eid in enumerate(unique_ids):
-            remap[eid] = i
+        # Index remapping — vectorized numpy, no Python loop
+        idx_np = np.asarray(indices, dtype=np.int32)
+        flat = idx_np.ravel()
+        unique_ids = np.unique(flat)
+        remap = np.empty(unique_ids.max() + 1, dtype=np.int32)
+        remap[unique_ids] = np.arange(len(unique_ids), dtype=np.int32)
         mapped = mx.array(remap[idx_np])
+        unique_ids = unique_ids.tolist()
 
         gate_w, gate_s, gate_b = self.gate_store.load_experts(unique_ids)
         up_w, up_s, up_b = self.up_store.load_experts(unique_ids)
