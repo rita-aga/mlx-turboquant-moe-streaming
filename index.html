@@ -183,15 +183,15 @@ body {
   color: rgba(255,255,255,0.28);
   flex-wrap: wrap;
   gap: 12px;
-  max-width: 1100px;
-  margin: 0 auto;
+  background: var(--forest);
+  margin: 0;
   position: relative;
   z-index: 2;
 }
 .hero-machine-sep { color: rgba(255,255,255,0.1); }
 .hero-rules-top { height: 4px; background: var(--crimson); position: relative; z-index: 2; }
 .hero-rules-top-thin { height: 1px; background: var(--gold); margin-top: 1px; position: relative; z-index: 2; }
-.hero-rules-bottom { height: 1px; background: var(--gold); position: relative; z-index: 2; }
+.hero-rules-bottom { height: 1px; background: var(--gold); position: relative; z-index: 2; margin-bottom: 0; }
 
 @media (max-width: 900px) {
   .hero-layout { grid-template-columns: 1fr; gap: 24px; }
@@ -210,7 +210,8 @@ body {
    CHAPTER HEADERS
    ================================================================ */
 .chapter-header {
-  padding: 80px 24px 48px;
+  padding: 80px 24px 28px;
+  margin-top: 0;
   position: relative;
 }
 .chapter-header .ch-num {
@@ -593,7 +594,7 @@ code.il {
 .hl-emerald { color: var(--emerald); font-weight: 700; }
 .hl-crimson { color: var(--crimson); font-weight: 700; }
 .hl-gold { color: var(--gold); font-weight: 700; }
-.section-gap { margin-bottom: 80px; }
+.section-gap { margin-bottom: 80px; padding-top: 48px; }
 .rule-gold { height: 1px; background: var(--gold); border: none; }
 .rule-crimson-thick { height: 4px; background: var(--crimson); border: none; }
 
@@ -677,7 +678,30 @@ pre { overflow-x: auto; }
 }
 
 @media (max-width: 1200px) {
-  .scroll-nav { display: none; }
+  .scroll-nav {
+    position: fixed;
+    right: auto; left: 0; top: auto; bottom: 0;
+    transform: none;
+    flex-direction: row;
+    background: var(--forest);
+    width: 100%; gap: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: 0; z-index: 9990;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
+  }
+  .scroll-nav a {
+    border-right: none; border-top: 2px solid transparent;
+    text-align: center; padding: 10px 12px;
+    color: rgba(255,255,255,0.5); font-size: 0.52rem; flex-shrink: 0;
+  }
+  .scroll-nav a:hover { color: rgba(255,255,255,0.8); }
+  .scroll-nav a.active {
+    color: var(--emerald); border-top-color: var(--emerald);
+    border-right-color: transparent;
+  }
+}
+@media (max-width: 600px) {
+  .scroll-nav a { padding: 8px 8px; font-size: 0.48rem; }
 }
 
 /* ================================================================
@@ -685,26 +709,27 @@ pre { overflow-x: auto; }
    ================================================================ */
 .two-solutions {
   background: var(--forest-deep);
-  padding: 64px 24px;
+  padding: 64px 24px 56px;
   color: #fff;
 }
-.two-solutions .before-after {
+/* Headline: 578 GB → 7.1 GB */
+.ts-headline {
   text-align: center;
-  margin-bottom: 48px;
+  margin-bottom: 20px;
 }
-.two-solutions .before-after .big-num {
+.ts-headline .ts-big {
   font-family: var(--font-display);
   font-size: 6rem;
   font-weight: 400;
   line-height: 1;
 }
-.two-solutions .before-after .big-arrow {
+.ts-headline .ts-arrow {
   font-size: 3rem;
   color: var(--gold);
   margin: 0 24px;
   vertical-align: middle;
 }
-.two-solutions .before-after .ba-label {
+.ts-headline .ts-sub {
   display: block;
   font-family: var(--font-ui);
   font-size: 0.6rem;
@@ -714,56 +739,113 @@ pre { overflow-x: auto; }
   color: rgba(255,255,255,0.35);
   margin-top: 12px;
 }
-.two-solutions .technique-label {
-  font-family: var(--font-ui);
-  font-size: 0.6rem;
+/* Summary strip */
+.ts-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  margin-bottom: 40px;
+  background: rgba(255,255,255,0.04);
+}
+.ts-summary-cell {
+  background: rgba(0,0,0,0.25);
+  padding: 18px 14px;
+  text-align: center;
+}
+.ts-summary-num {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.ts-summary-label {
+  font-family: var(--font-ui);
+  font-size: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+/* Technique cards */
+.ts-techniques {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.ts-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 32px 28px 28px;
+  position: relative;
+}
+.ts-card-tag {
+  font-family: var(--font-ui);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   margin-bottom: 8px;
 }
-.two-solutions .technique-title {
+.ts-card-title {
   font-family: var(--font-display);
-  font-size: 1.8rem;
+  font-size: 1.7rem;
   line-height: 1.2;
   margin-bottom: 10px;
 }
-.two-solutions .technique-desc {
+.ts-card-desc {
   font-family: var(--font-body);
-  font-size: 0.95rem;
-  color: rgba(255,255,255,0.65);
+  font-size: 0.92rem;
+  color: rgba(255,255,255,0.6);
   line-height: 1.6;
   margin-bottom: 20px;
 }
-.two-solutions .stat-boxes {
-  display: flex;
-  gap: 12px;
+/* Stat grid inside each card */
+.ts-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
 }
-.two-solutions .stat-box {
+.ts-stat {
   background: rgba(0,0,0,0.3);
-  padding: 14px 18px;
-  flex: 1;
+  padding: 14px 14px;
+  text-align: center;
 }
-.two-solutions .stat-box .stat-num {
+.ts-stat-num {
   font-family: var(--font-mono);
-  font-size: 1.3rem;
-  font-weight: 600;
+  font-size: 1.2rem;
+  font-weight: 700;
   line-height: 1;
   margin-bottom: 4px;
 }
-.two-solutions .stat-box .stat-label {
+.ts-stat-label {
   font-family: var(--font-ui);
-  font-size: 0.55rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-size: 0.48rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.38);
 }
+/* Featured stat (spans full width) */
+.ts-stat-feat {
+  grid-column: 1 / -1;
+  background: rgba(0,0,0,0.4);
+  padding: 16px 14px;
+  text-align: center;
+}
+.ts-stat-feat .ts-stat-num { font-size: 1.4rem; }
+
+/* Responsive */
 @media (max-width: 768px) {
-  .two-solutions .before-after .big-num { font-size: 3.5rem; }
-  .two-solutions .before-after .big-arrow { font-size: 2rem; margin: 0 12px; }
-  .two-solutions .technique-title { font-size: 1.4rem; }
-  .two-solutions .stat-boxes { flex-direction: column; }
+  .ts-headline .ts-big { font-size: 3.5rem; }
+  .ts-headline .ts-arrow { font-size: 2rem; margin: 0 12px; }
+  .ts-summary { grid-template-columns: 1fr 1fr; }
+  .ts-techniques { grid-template-columns: 1fr; }
+  .ts-card-title { font-size: 1.4rem; }
+}
+@media (max-width: 480px) {
+  .ts-headline .ts-big { font-size: 2.6rem; }
+  .ts-summary { grid-template-columns: 1fr 1fr; }
+  .ts-stat-grid { grid-template-columns: 1fr 1fr; }
 }
 </style>
 </head>
@@ -840,45 +922,95 @@ pre { overflow-x: auto; }
 <section id="two-solutions" class="two-solutions">
   <div class="wide-col">
 
-    <div class="before-after">
-      <span class="big-num" style="color: var(--crimson);">578 GB</span>
-      <span class="big-arrow">&rarr;</span>
-      <span class="big-num" style="color: var(--emerald);">7.1 GB</span>
-      <div class="ba-label">Model on Disk &rarr; RAM Used</div>
+    <!-- Headline: the before/after -->
+    <div class="ts-headline">
+      <span class="ts-big" style="color: var(--crimson);">578 GB</span>
+      <span class="ts-arrow">&rarr;</span>
+      <span class="ts-big" style="color: var(--emerald);">7.1 GB</span>
+      <span class="ts-sub">Model on Disk &rarr; RAM Used</span>
     </div>
 
-    <div class="grid-2">
+    <!-- Global stats strip -->
+    <div class="ts-summary">
+      <div class="ts-summary-cell">
+        <div class="ts-summary-num" style="color: var(--crimson-light);">1.04T</div>
+        <div class="ts-summary-label">Parameters</div>
+      </div>
+      <div class="ts-summary-cell">
+        <div class="ts-summary-num" style="color: var(--emerald-light);">0.53</div>
+        <div class="ts-summary-label">Tokens / Second</div>
+      </div>
+      <div class="ts-summary-cell">
+        <div class="ts-summary-num" style="color: var(--gold-light);">953</div>
+        <div class="ts-summary-label">Lines of Code</div>
+      </div>
+      <div class="ts-summary-cell">
+        <div class="ts-summary-num" style="color: var(--sakura);">Correct</div>
+        <div class="ts-summary-label">Verified Output</div>
+      </div>
+    </div>
 
-      <!-- Technique 1 -->
-      <div>
-        <div class="technique-label" style="color: var(--sakura);">Technique 1</div>
-        <div class="technique-title">SSD Expert Streaming</div>
-        <p class="technique-desc">384 experts per layer. Only 8 fire per token. Load those 8 from disk, skip the rest.</p>
-        <div class="stat-boxes">
-          <div class="stat-box">
-            <div class="stat-num" style="color: var(--sakura);">571 GB</div>
-            <div class="stat-label">Streamed</div>
+    <!-- Two technique cards -->
+    <div class="ts-techniques">
+
+      <!-- Technique 1: SSD Streaming -->
+      <div class="ts-card" style="border-color: rgba(255,112,144,0.2);">
+        <div class="ts-card-tag" style="color: var(--sakura);">Technique 1</div>
+        <div class="ts-card-title">SSD Expert Streaming</div>
+        <p class="ts-card-desc">Kimi-K2 has 384 experts per layer. Only 8 fire per token. Load those 8 from the NVMe drive, skip the other 376. The OS page cache handles the rest.</p>
+        <div class="ts-stat-grid">
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--sakura);">384</div>
+            <div class="ts-stat-label">Experts / Layer</div>
           </div>
-          <div class="stat-box">
-            <div class="stat-num" style="color: var(--sakura);">60</div>
-            <div class="stat-label">Layers Patched</div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--sakura);">8</div>
+            <div class="ts-stat-label">Active / Token</div>
+          </div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--sakura);">97.9%</div>
+            <div class="ts-stat-label">Idle per Token</div>
+          </div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--sakura);">60</div>
+            <div class="ts-stat-label">MoE Layers Patched</div>
+          </div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--sakura);">571 GB</div>
+            <div class="ts-stat-label">Expert Weights on SSD</div>
+          </div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--sakura);">2.6x</div>
+            <div class="ts-stat-label">C Extension Speedup</div>
           </div>
         </div>
       </div>
 
-      <!-- Technique 2 -->
-      <div>
-        <div class="technique-label" style="color: var(--emerald);">Technique 2</div>
-        <div class="technique-title">TurboQuant KV Compression</div>
-        <p class="technique-desc">Attention memory grows with every token. Rotate it, compress it 5.3x, lose nothing.</p>
-        <div class="stat-boxes">
-          <div class="stat-box">
-            <div class="stat-num" style="color: var(--emerald);">5.3x</div>
-            <div class="stat-label">Compression</div>
+      <!-- Technique 2: TurboQuant -->
+      <div class="ts-card" style="border-color: rgba(0,216,128,0.2);">
+        <div class="ts-card-tag" style="color: var(--emerald);">Technique 2</div>
+        <div class="ts-card-title">TurboQuant KV Compression</div>
+        <p class="ts-card-desc">Attention memory grows with every token. Rotate it with a Hadamard matrix to kill outliers, then quantize. Compress 5.3x. Factual queries produce exact-match output.</p>
+        <div class="ts-stat-grid">
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--emerald);">5.3x</div>
+            <div class="ts-stat-label">KV Cache Compression</div>
           </div>
-          <div class="stat-box">
-            <div class="stat-num" style="color: var(--emerald);">54%</div>
-            <div class="stat-label">Less Error</div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--emerald);">61</div>
+            <div class="ts-stat-label">Layers Compressed</div>
+          </div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--emerald);">27.7 &rarr; 3.2</div>
+            <div class="ts-stat-label">Kurtosis After Rotation</div>
+          </div>
+          <div class="ts-stat">
+            <div class="ts-stat-num" style="color: var(--emerald);">54%</div>
+            <div class="ts-stat-label">Less Quantization Error</div>
+          </div>
+          <div class="ts-stat-feat">
+            <div class="ts-stat-num" style="color: var(--gold);">EXACT MATCH</div>
+            <div class="ts-stat-label">Factual Accuracy at 3-bit &amp; 4-bit (Google's Claim: Confirmed)</div>
           </div>
         </div>
       </div>
