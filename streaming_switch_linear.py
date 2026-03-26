@@ -204,21 +204,37 @@ class StreamingSwitchGLU(nn.Module):
         else:
             self.activation = activation
 
+    def _stream_c(self, indices, store):
+        """Load experts using fast_streaming C extension (remap + pread in one call)."""
+        import fast_streaming
+        idx_np = np.asarray(indices, dtype=np.int32)
+        w_np, s_np, b_np, mapped_np = fast_streaming.stream_experts(
+            idx_np.flatten(),
+            store._w_fd, store.weight_offset, store.weight_expert_bytes, tuple(store.weight_shape),
+            store._s_fd, store.scales_offset, store.scales_expert_bytes, tuple(store.scales_shape),
+            store._b_fd if store._b_fd >= 0 else -1,
+            store.biases_offset if store._b_fd >= 0 else 0,
+            store.biases_expert_bytes if store._b_fd >= 0 else 0,
+            tuple(store.biases_shape) if store.biases_shape else (0,),
+        )
+        w = mx.array(w_np)
+        s = mx.array(s_np).view(mx.bfloat16)
+        b = mx.array(b_np).view(mx.bfloat16) if b_np is not None and b_np.size > 0 else None
+        mapped = mx.array(mapped_np.reshape(indices.shape))
+        return w, s, b, mapped
+
     def __call__(self, x, indices) -> mx.array:
         x = mx.expand_dims(x, (-2, -3))
 
-        # Index remapping: get unique experts, build remap to 0..K-1
-        idx_np = np.array(indices)  # mx → numpy (one sync point)
+        # Index remapping + expert loading
+        idx_np = np.array(indices)
         unique_ids = np.unique(idx_np.flatten()).tolist()
-
-        # Remap using numpy lookup table (fast, no Python loops)
         max_id = max(unique_ids) + 1
         remap = np.empty(max_id, dtype=np.int32)
         for i, eid in enumerate(unique_ids):
             remap[eid] = i
         mapped = mx.array(remap[idx_np])
 
-        # Load gate and up experts from SSD
         gate_w, gate_s, gate_b = self.gate_store.load_experts(unique_ids)
         up_w, up_s, up_b = self.up_store.load_experts(unique_ids)
 
@@ -239,8 +255,9 @@ class StreamingSwitchGLU(nn.Module):
         # SwiGLU activation
         x_act = self.activation(x_up, x_gate)
 
-        # Down projection (can start loading while SwiGLU computes on GPU)
+        # Down projection
         down_w, down_s, down_b = self.down_store.load_experts(unique_ids)
+
         x_out = mx.gather_qmm(
             x_act, down_w, down_s, down_b,
             rhs_indices=mapped, transpose=True,
