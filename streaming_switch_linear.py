@@ -205,24 +205,24 @@ class StreamingSwitchGLU(nn.Module):
             self.activation = activation
 
     def __call__(self, x, indices) -> mx.array:
-        orig_shape = x.shape
         x = mx.expand_dims(x, (-2, -3))
 
-        # Get unique expert IDs (handle any shape)
-        flat_np = np.array(indices.tolist()).flatten()
-        unique_ids = sorted(set(int(i) for i in flat_np))
-        k = len(unique_ids)
+        # Index remapping: get unique experts, build remap to 0..K-1
+        idx_np = np.array(indices)  # mx → numpy (one sync point)
+        unique_ids = np.unique(idx_np.flatten()).tolist()
 
-        # Remap indices: original expert ID → position in loaded subset
-        id_map = {eid: i for i, eid in enumerate(unique_ids)}
-        mapped_np = np.vectorize(lambda x: id_map[int(x)])(np.array(indices.tolist()))
-        mapped = mx.array(mapped_np)
+        # Remap using numpy lookup table (fast, no Python loops)
+        max_id = max(unique_ids) + 1
+        remap = np.empty(max_id, dtype=np.int32)
+        for i, eid in enumerate(unique_ids):
+            remap[eid] = i
+        mapped = mx.array(remap[idx_np])
 
-        # Load only the selected experts from SSD
+        # Load gate and up experts from SSD
         gate_w, gate_s, gate_b = self.gate_store.load_experts(unique_ids)
         up_w, up_s, up_b = self.up_store.load_experts(unique_ids)
 
-        # Compute gate and up projections
+        # Gate + Up projections (GPU)
         x_gate = mx.gather_qmm(
             x, gate_w, gate_s, gate_b,
             rhs_indices=mapped, transpose=True,
@@ -239,7 +239,7 @@ class StreamingSwitchGLU(nn.Module):
         # SwiGLU activation
         x_act = self.activation(x_up, x_gate)
 
-        # Down projection
+        # Down projection (can start loading while SwiGLU computes on GPU)
         down_w, down_s, down_b = self.down_store.load_experts(unique_ids)
         x_out = mx.gather_qmm(
             x_act, down_w, down_s, down_b,
@@ -248,7 +248,6 @@ class StreamingSwitchGLU(nn.Module):
             bits=self.down_store.bits,
         )
 
-        # Match original SwitchGLU output shape: squeeze the extra dim from expand_dims
         return x_out.squeeze(-2)
 
 
